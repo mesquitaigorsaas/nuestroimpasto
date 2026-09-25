@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+/*
+ * Nuestro Impasto — tokens de cor tirados da logo.
+ * creme (fundo) · grafite (texto/ação principal) · dourado (destaque) · verde/vermelho (faixa italiana)
+ */
+@theme {
+  --color-cream: #f9f6ee;
+  --color-cream-2: #f1ebe1;
+  --color-cream-3: #e7dfd1;
+  --color-ink: #1e262c;
+  --color-ink-2: #3a444b;
+  --color-muted: #6b7278;
+  --color-gold: #c79563;
+  --color-gold-dark: #a8763f;
+  --color-gold-soft: #f3e6d6;
+  --color-basil: #148448;
+  --color-tomato: #d91328;
+  --color-line: #e4ddd0;
+
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-gold-soft);
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scroll-thin:hover {
+  scrollbar-color: #cfc6b6 transparent;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Faixa italiana usada como detalhe da marca */
+.tricolore {
+  background: linear-gradient(90deg, var(--color-basil) 0 33.3%, #ffffff 33.3% 66.6%, var(--color-tomato) 66.6% 100%);
+}
+.tricolore-soft {
+  background: linear-gradient(90deg, var(--color-basil) 0 33.3%, var(--color-cream-3) 33.3% 66.6%, var(--color-tomato) 66.6% 100%);
+}
+/* Sublinhado tricolor para títulos de seção */
+.title-tricolore {
+  position: relative;
+  padding-bottom: 6px;
+}
+.title-tricolore::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 42px;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--color-basil) 0 33.3%, var(--color-cream-3) 33.3% 66.6%, var(--color-tomato) 66.6% 100%);
+}
+/* Marcador do item ativo no menu lateral */
+.nav-active {
+  position: relative;
+}
+.nav-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--color-basil) 0 50%, var(--color-tomato) 50% 100%);
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-ink text-cream hover:bg-ink-2;
+  }
+  .btn-gold {
+    @apply bg-gold text-white hover:bg-gold-dark;
+  }
+  .btn-soft {
+    @apply bg-cream-2 text-ink hover:bg-cream-3;
+  }
+  .btn-ghost {
+    @apply text-ink hover:bg-cream-2;
+  }
+  .btn-outline {
+    @apply border border-line text-ink hover:bg-cream-2;
+  }
+  .btn-danger {
+    @apply bg-tomato text-white hover:bg-tomato/90;
+  }
+  .btn-red {
+    @apply bg-tomato text-white hover:bg-[#b80f21];
+  }
+  .btn-green {
+    @apply bg-basil text-white hover:bg-[#0f6b3a];
+  }
+  .icon-btn {
+    @apply inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-cream-2;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-muted/70 focus:border-basil focus:ring-2 focus:ring-basil/20;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink;
+  }
+  .card {
+    @apply rounded-2xl border border-line bg-white;
+  }
+  .chip {
+    @apply inline-flex h-8 shrink-0 items-center rounded-lg px-3 text-sm font-medium whitespace-nowrap transition-colors;
+  }
+  .chip-on {
+    @apply bg-basil text-white;
+  }
+  .chip-off {
+    @apply bg-cream-2 text-ink hover:bg-cream-3;
+  }
+}

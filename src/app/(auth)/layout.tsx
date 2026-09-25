@@ -1,0 +1,24 @@
+import Link from "next/link";
+
+export default function AuthLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
+      <Link href="/" className="mb-8 flex flex-col items-center gap-3" aria-label="Nuestro Impasto — início">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/mark.png" alt="" className="size-14" />
+        <span className="flex flex-col items-center leading-none">
+          <span className="text-[11px] font-medium tracking-[0.4em] text-ink-2">NUESTRO</span>
+          <span className="text-2xl font-bold tracking-[0.1em]">IMPASTO</span>
+        </span>
+        <span className="tricolore h-[3px] w-20 rounded-full" />
+      </Link>
+      <div className="w-full max-w-[420px] rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8">{children}</div>
+      <p className="mt-8 text-xs text-muted">
+        Desenvolvido por{" "}
+        <a href="https://mesquitasaas.online/" target="_blank" rel="noopener" className="font-medium hover:text-ink">
+          Mesquita SaaS
+        </a>
+      </p>
+    </div>
+  );
+}
