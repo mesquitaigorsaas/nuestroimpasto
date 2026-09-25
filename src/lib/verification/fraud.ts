@@ -23,9 +23,9 @@ function cleanSite(v: string) {
  * Sinais determinísticos de risco. Servem para ENCAMINHAR à revisão humana —
  * nunca para bloquear ou reprovar automaticamente.
  */
-export function detectFraudSignals(input: VerificationInput, currentRequestId?: string): FraudSignal[] {
+export async function detectFraudSignals(input: VerificationInput, currentRequestId?: string): Promise<FraudSignal[]> {
   const signals: FraudSignal[] = [];
-  const others = all<{ user_id: string; data: string; status: string; created_at: string }>(
+  const others = await all<{ user_id: string; data: string; status: string; created_at: string }>(
     "SELECT user_id, data, status, created_at FROM verification_requests WHERE user_id <> ? AND status <> 'rejected'",
     input.userId,
   );
@@ -61,14 +61,14 @@ export function detectFraudSignals(input: VerificationInput, currentRequestId?: 
   }
 
   const attempts =
-    get<{ n: number }>(
+    (await get<{ n: number }>(
       "SELECT COUNT(*) AS n FROM verification_requests WHERE user_id = ? AND created_at > datetime('now','-30 days') AND id <> ?",
       input.userId,
       currentRequestId ?? "",
-    )?.n ?? 0;
+    ))?.n ?? 0;
   if (attempts >= 3) signals.push({ code: "repeated_attempts", severity: "medium", description: `${attempts + 1} solicitações nos últimos 30 dias.` });
 
-  const recentRejection = get(
+  const recentRejection = await get(
     "SELECT 1 FROM verification_requests WHERE user_id = ? AND status = 'rejected' AND reviewed_at > datetime('now','-7 days')",
     input.userId,
   );
@@ -84,7 +84,7 @@ export function detectFraudSignals(input: VerificationInput, currentRequestId?: 
     });
   }
 
-  const status = get<{ status: string }>("SELECT status FROM users WHERE id = ?", input.userId)?.status;
+  const status = (await get<{ status: string }>("SELECT status FROM users WHERE id = ?", input.userId))?.status;
   if (status === "suspended") signals.push({ code: "suspended_account", severity: "high", description: "A conta está suspensa." });
 
   return signals;

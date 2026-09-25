@@ -6,8 +6,8 @@ import { StatusPill } from "@/components/ui";
 import { Thumbnail } from "@/components/video/VideoCard";
 import { VideoModeration } from "./VideoModeration";
 
-export default function AdminVideos() {
-  const videos = listRecentVideos();
+export default async function AdminVideos() {
+  const videos = await listRecentVideos();
   return (
     <div className="card divide-y divide-line overflow-hidden">
       {videos.map((v) => (

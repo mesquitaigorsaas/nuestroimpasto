@@ -95,7 +95,7 @@ export const TECH_FIELDS = [
 
 export type TechInfo = Partial<Record<(typeof TECH_FIELDS)[number]["key"], string>>;
 
-export const MAX_VIDEO_BYTES = 1024 * 1024 * 1024; // 1 GB por vídeo no MVP
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB por vídeo (limite do plano grátis do Supabase Storage)
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 /**

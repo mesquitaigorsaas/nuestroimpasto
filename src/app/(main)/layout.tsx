@@ -16,7 +16,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
       }
     : null;
   return (
-    <AppShell user={shellUser} unread={user ? unreadCount(user.id) : 0} following={user ? followingChannels(user.id) : []}>
+    <AppShell user={shellUser} unread={user ? await unreadCount(user.id) : 0} following={user ? await followingChannels(user.id) : []}>
       {children}
     </AppShell>
   );

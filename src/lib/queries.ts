@@ -23,24 +23,24 @@ const TRENDING_SCORE = `((v.views + v.likes * 4 + v.comments_count * 6 + v.respo
 /* Feed / Home                                                         */
 /* ------------------------------------------------------------------ */
 
-export function latestVideos(limit = 24, category?: string) {
-  return all<VideoCardData>(
+export async function latestVideos(limit = 24, category?: string) {
+  return await all<VideoCardData>(
     `SELECT ${CARD_COLUMNS} ${FROM} WHERE ${LISTABLE} ${category ? "AND v.category = ?" : ""}
      ORDER BY v.created_at DESC LIMIT ?`,
     ...(category ? [category, limit] : [limit]),
   );
 }
 
-export function trendingVideos(limit = 24, category?: string) {
-  return all<VideoCardData>(
+export async function trendingVideos(limit = 24, category?: string) {
+  return await all<VideoCardData>(
     `SELECT ${CARD_COLUMNS} ${FROM} WHERE ${LISTABLE} ${category ? "AND v.category = ?" : ""}
      ORDER BY ${TRENDING_SCORE} DESC LIMIT ?`,
     ...(category ? [category, limit] : [limit]),
   );
 }
 
-export function followingVideos(userId: string, limit = 24) {
-  return all<VideoCardData>(
+export async function followingVideos(userId: string, limit = 24) {
+  return await all<VideoCardData>(
     `SELECT ${CARD_COLUMNS} ${FROM} JOIN follows f ON f.following_id = v.user_id AND f.follower_id = ?
      WHERE ${LISTABLE} ORDER BY v.created_at DESC LIMIT ?`,
     userId,
@@ -49,15 +49,15 @@ export function followingVideos(userId: string, limit = 24) {
 }
 
 /** Vídeos com mais conversa recente (comentários e respostas em vídeo nos últimos 14 dias). */
-export function activeDiscussions(limit = 8) {
-  return all<VideoCardData & { recent_activity: number }>(
+export async function activeDiscussions(limit = 8) {
+  return (await all<VideoCardData & { recent_activity: number }>(
     `SELECT ${CARD_COLUMNS},
        (SELECT COUNT(*) FROM comments c WHERE c.video_id = v.id AND c.created_at > datetime('now','-14 days'))
        + (SELECT COUNT(*) FROM videos r WHERE r.parent_id = v.id AND r.status = 'published') * 3 AS recent_activity
      ${FROM} WHERE ${LISTABLE}
      ORDER BY recent_activity DESC, v.created_at DESC LIMIT ?`,
     limit,
-  ).filter((v) => v.recent_activity > 0);
+  )).filter((v) => v.recent_activity > 0);
 }
 
 /**
@@ -65,8 +65,8 @@ export function activeDiscussions(limit = 8) {
  * Candidatos recentes → pontuação por afinidade de categoria, canais seguidos,
  * engajamento, novidade e empurrão para criadores novos. Evita ordenar só por views.
  */
-export function forYou(viewerId: string | null, limit = 24, category?: string) {
-  const candidates = all<VideoCardData & { age_hours: number; channel_videos: number; watched: number }>(
+export async function forYou(viewerId: string | null, limit = 24, category?: string) {
+  const candidates = await all<VideoCardData & { age_hours: number; channel_videos: number; watched: number }>(
     `SELECT ${CARD_COLUMNS},
        (julianday('now') - julianday(v.created_at)) * 24 AS age_hours,
        (SELECT COUNT(*) FROM videos x WHERE x.user_id = v.user_id AND x.status = 'published') AS channel_videos,
@@ -79,7 +79,7 @@ export function forYou(viewerId: string | null, limit = 24, category?: string) {
   const affinity = new Map<string, number>();
   const followed = new Set<string>();
   if (viewerId) {
-    for (const row of all<{ category: string; w: number }>(
+    for (const row of await all<{ category: string; w: number }>(
       `SELECT v.category, SUM(w) AS w FROM (
          SELECT video_id, 3 AS w FROM likes WHERE user_id = ?
          UNION ALL SELECT video_id, 2 FROM saves WHERE user_id = ?
@@ -91,7 +91,7 @@ export function forYou(viewerId: string | null, limit = 24, category?: string) {
     )) {
       affinity.set(row.category, row.w);
     }
-    for (const row of all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", viewerId)) {
+    for (const row of await all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", viewerId)) {
       followed.add(row.following_id);
     }
   }
@@ -132,8 +132,8 @@ export function forYou(viewerId: string | null, limit = 24, category?: string) {
 /* Vídeo                                                               */
 /* ------------------------------------------------------------------ */
 
-export function getVideo(id: string) {
-  return get<VideoFull>(
+export async function getVideo(id: string) {
+  return await get<VideoFull>(
     `SELECT ${CARD_COLUMNS}, v.description, v.tags, v.video_key, v.tech, v.visibility, v.status,
        u.followers_count AS channel_followers, u.specialty AS channel_specialty
      ${FROM} WHERE v.id = ?`,
@@ -141,10 +141,10 @@ export function getVideo(id: string) {
   );
 }
 
-export function relatedVideos(video: Pick<VideoFull, "id" | "category" | "user_id">, limit = 16) {
-  return all<VideoCardData>(
+export async function relatedVideos(video: Pick<VideoFull, "id" | "category" | "user_id">, limit = 16) {
+  return await all<VideoCardData>(
     `SELECT ${CARD_COLUMNS} ${FROM} WHERE ${LISTABLE} AND v.id <> ?
-     ORDER BY (v.category = ?) * 3 + (v.user_id = ?) * 2 + ${TRENDING_SCORE} * 50 DESC LIMIT ?`,
+     ORDER BY (v.category = ?)::int * 3 + (v.user_id = ?)::int * 2 +${TRENDING_SCORE} * 50 DESC LIMIT ?`,
     video.id,
     video.category,
     video.user_id,
@@ -152,17 +152,17 @@ export function relatedVideos(video: Pick<VideoFull, "id" | "category" | "user_i
   );
 }
 
-export function videoResponses(videoId: string) {
-  return all<VideoCardData>(
+export async function videoResponses(videoId: string) {
+  return await all<VideoCardData>(
     `SELECT ${CARD_COLUMNS} ${FROM} WHERE v.parent_id = ? AND v.status = 'published' AND u.status <> 'banned'
      ORDER BY v.created_at DESC`,
     videoId,
   );
 }
 
-export function viewerVideoState(userId: string | undefined, video: Pick<VideoFull, "id" | "user_id">) {
+export async function viewerVideoState(userId: string | undefined, video: Pick<VideoFull, "id" | "user_id">) {
   if (!userId) return { liked: false, saved: false, following: false };
-  const row = get<{ liked: number; saved: number; following: number }>(
+  const row = await get<{ liked: number; saved: number; following: number }>(
     `SELECT EXISTS(SELECT 1 FROM likes WHERE user_id = ? AND video_id = ?) AS liked,
             EXISTS(SELECT 1 FROM saves WHERE user_id = ? AND video_id = ?) AS saved,
             EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?) AS following`,
@@ -185,9 +185,9 @@ const COMMENT_COLUMNS = (viewerId: string | null) => `c.id, c.video_id, c.user_i
   u.avatar_key AS author_avatar, u.member_type AS author_member_type,
   ${viewerId ? "EXISTS(SELECT 1 FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = ?)" : "0"} AS liked_by_me`;
 
-export function topComments(videoId: string, viewerId: string | null, sort: "top" | "new" = "top") {
+export async function topComments(videoId: string, viewerId: string | null, sort: "top" | "new" = "top") {
   const order = sort === "new" ? "c.created_at DESC" : "(c.likes * 2 + c.replies_count * 3) DESC, c.created_at DESC";
-  return all<CommentData>(
+  return await all<CommentData>(
     `SELECT ${COMMENT_COLUMNS(viewerId)} FROM comments c JOIN users u ON u.id = c.user_id
      WHERE c.video_id = ? AND c.parent_id IS NULL AND c.status = 'visible' AND u.status <> 'banned'
      ORDER BY ${order} LIMIT 200`,
@@ -195,8 +195,8 @@ export function topComments(videoId: string, viewerId: string | null, sort: "top
   );
 }
 
-export function commentReplies(parentId: string, viewerId: string | null) {
-  return all<CommentData>(
+export async function commentReplies(parentId: string, viewerId: string | null) {
+  return await all<CommentData>(
     `SELECT ${COMMENT_COLUMNS(viewerId)} FROM comments c JOIN users u ON u.id = c.user_id
      WHERE c.parent_id = ? AND c.status = 'visible' AND u.status <> 'banned' ORDER BY c.created_at ASC`,
     ...[viewerId, parentId].filter((p): p is string => !!p),
@@ -209,21 +209,21 @@ export function commentReplies(parentId: string, viewerId: string | null) {
 
 export type Channel = Omit<User, "email"> & { videos_count: number; total_views: number };
 
-export function getChannelByHandle(handle: string) {
-  return get<Channel>(
+export async function getChannelByHandle(handle: string) {
+  return await get<Channel>(
     `SELECT u.id, u.name, u.handle, u.avatar_key, u.banner_key, u.bio, u.specialty, u.location, u.website,
        u.instagram, u.role, u.member_type, u.verification_status, u.status, u.followers_count,
        u.following_count, u.created_at,
        (SELECT COUNT(*) FROM videos v WHERE v.user_id = u.id AND v.status = 'published' AND v.visibility = 'public') AS videos_count,
        (SELECT COALESCE(SUM(views),0) FROM videos v WHERE v.user_id = u.id AND v.status = 'published') AS total_views
-     FROM users u WHERE u.handle = ? COLLATE NOCASE`,
+     FROM users u WHERE lower(u.handle) = lower(?)`,
     handle,
   );
 }
 
-export function channelVideos(userId: string, sort: "new" | "popular" | "old" = "new", onlyResponses = false) {
+export async function channelVideos(userId: string, sort: "new" | "popular" | "old" = "new", onlyResponses = false) {
   const order = sort === "popular" ? "v.views DESC" : sort === "old" ? "v.created_at ASC" : "v.created_at DESC";
-  return all<VideoCardData>(
+  return await all<VideoCardData>(
     `SELECT ${CARD_COLUMNS} ${FROM} WHERE v.user_id = ? AND v.status = 'published' AND v.visibility = 'public'
      ${onlyResponses ? "AND v.parent_id IS NOT NULL" : ""} ORDER BY ${order} LIMIT 200`,
     userId,
@@ -239,7 +239,7 @@ const LAST_VIDEO_JOIN = `LEFT JOIN videos lv ON lv.id = (SELECT id FROM videos x
 
 const PUBLISHERS = `u.status = 'active' AND u.member_type IN ('student','professional','related')`;
 
-export function discoverChannels(opts: { type?: string; category?: string; sort?: "new" | "popular"; limit?: number } = {}) {
+export async function discoverChannels(opts: { type?: string; category?: string; sort?: "new" | "popular"; limit?: number } = {}) {
   const where = [PUBLISHERS];
   const params: string[] = [];
   if (opts.type === "student" || opts.type === "professional" || opts.type === "related") {
@@ -251,7 +251,7 @@ export function discoverChannels(opts: { type?: string; category?: string; sort?
     params.push(opts.category);
   }
   const order = opts.sort === "new" ? "u.created_at DESC" : "u.followers_count DESC, u.created_at DESC";
-  return all<ChannelCardData>(
+  return await all<ChannelCardData>(
     `SELECT ${CHANNEL_CARD} FROM users u ${LAST_VIDEO_JOIN} WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ?`,
     ...params,
     opts.limit ?? 48,
@@ -259,8 +259,8 @@ export function discoverChannels(opts: { type?: string; category?: string; sort?
 }
 
 /** Profissionais que entraram recentemente — ajuda criadores novos a serem descobertos. */
-export function newCreators(limit = 8, excludeUserId?: string) {
-  return all<ChannelCardData>(
+export async function newCreators(limit = 8, excludeUserId?: string) {
+  return await all<ChannelCardData>(
     `SELECT ${CHANNEL_CARD} FROM users u ${LAST_VIDEO_JOIN}
      WHERE ${PUBLISHERS} AND u.id <> ? ORDER BY u.created_at DESC LIMIT ?`,
     excludeUserId ?? "",
@@ -268,8 +268,8 @@ export function newCreators(limit = 8, excludeUserId?: string) {
   );
 }
 
-export function followingChannels(userId: string) {
-  return all<{ id: string; name: string; handle: string; avatar_key: string | null; has_new: number }>(
+export async function followingChannels(userId: string) {
+  return await all<{ id: string; name: string; handle: string; avatar_key: string | null; has_new: number }>(
     `SELECT u.id, u.name, u.handle, u.avatar_key,
        EXISTS(SELECT 1 FROM videos v WHERE v.user_id = u.id AND v.created_at > datetime('now','-3 days') AND v.status='published') AS has_new
      FROM follows f JOIN users u ON u.id = f.following_id WHERE f.follower_id = ? AND u.status <> 'banned'
@@ -278,12 +278,12 @@ export function followingChannels(userId: string) {
   );
 }
 
-export function followList(userId: string, direction: "followers" | "following") {
+export async function followList(userId: string, direction: "followers" | "following") {
   const [on, where] =
     direction === "followers"
       ? ["u.id = f.follower_id", "f.following_id = ?"]
       : ["u.id = f.following_id", "f.follower_id = ?"];
-  return all<ChannelCardData>(
+  return await all<ChannelCardData>(
     `SELECT ${CHANNEL_CARD} FROM follows f JOIN users u ON ${on} ${LAST_VIDEO_JOIN}
      WHERE ${where} AND u.status <> 'banned' ORDER BY f.created_at DESC`,
     userId,
@@ -294,24 +294,24 @@ export function followList(userId: string, direction: "followers" | "following")
 /* Biblioteca pessoal                                                  */
 /* ------------------------------------------------------------------ */
 
-export function historyVideos(userId: string) {
-  return all<VideoCardData & { watched_at: string }>(
+export async function historyVideos(userId: string) {
+  return await all<VideoCardData & { watched_at: string }>(
     `SELECT ${CARD_COLUMNS}, h.watched_at ${FROM} JOIN history h ON h.video_id = v.id AND h.user_id = ?
      WHERE v.status = 'published' ORDER BY h.watched_at DESC LIMIT 200`,
     userId,
   );
 }
 
-export function savedVideos(userId: string) {
-  return all<VideoCardData>(
+export async function savedVideos(userId: string) {
+  return await all<VideoCardData>(
     `SELECT ${CARD_COLUMNS} ${FROM} JOIN saves s ON s.video_id = v.id AND s.user_id = ?
      WHERE v.status = 'published' ORDER BY s.created_at DESC`,
     userId,
   );
 }
 
-export function likedVideos(userId: string) {
-  return all<VideoCardData>(
+export async function likedVideos(userId: string) {
+  return await all<VideoCardData>(
     `SELECT ${CARD_COLUMNS} ${FROM} JOIN likes l ON l.video_id = v.id AND l.user_id = ?
      WHERE v.status = 'published' ORDER BY l.created_at DESC`,
     userId,
@@ -322,16 +322,16 @@ export function likedVideos(userId: string) {
 /* Busca                                                               */
 /* ------------------------------------------------------------------ */
 
-/** Converte o texto digitado numa consulta FTS5 segura (prefixo em cada termo). */
+/** Converte o texto digitado numa consulta tsquery segura (todos os termos, com prefixo). */
 export function ftsQuery(q: string) {
   const terms = q
     .normalize("NFKC")
-    .replace(/["'*^():]/g, " ")
-    .split(/\s+/)
-    .map((t) => t.replace(/[^\p{L}\p{N}%.-]/gu, ""))
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .split(" ")
     .filter((t) => t.length > 0)
     .slice(0, 8);
-  return terms.map((t) => `"${t}"*`).join(" ");
+  return terms.map((t) => `${t}:*`).join(" & ");
 }
 
 export type SearchFilters = {
@@ -342,7 +342,10 @@ export type SearchFilters = {
   sort?: "relevance" | "new" | "views";
 };
 
-export function searchVideos(f: SearchFilters, limit = 40) {
+/** Relevância no estilo do bm25 do SQLite: menor = mais relevante. */
+const RANK = "(-ts_rank(fts.document, sq.q) * 10)";
+
+export async function searchVideos(f: SearchFilters, limit = 40) {
   const match = ftsQuery(f.q);
   if (!match) return [];
   const where = [LISTABLE];
@@ -362,17 +365,19 @@ export function searchVideos(f: SearchFilters, limit = 40) {
       : f.sort === "views"
         ? "v.views DESC"
         : f.kind === "discussions"
-          ? "(v.comments_count + v.responses_count * 3) DESC, fts.rank"
-          : "fts.rank - log(v.views + v.likes * 4 + 10) * 0.3";
+          ? `(v.comments_count + v.responses_count * 3) DESC, ${RANK}`
+          : `${RANK} - log(v.views + v.likes * 4 + 10) * 0.3`;
   params.push(limit);
-  return all<VideoCardData & { description: string }>(
-    `SELECT ${CARD_COLUMNS}, v.description FROM videos_fts fts JOIN videos v ON v.id = fts.id JOIN users u ON u.id = v.user_id
-     WHERE videos_fts MATCH ? AND ${where.join(" AND ")} ORDER BY ${order} LIMIT ?`,
+  return await all<VideoCardData & { description: string }>(
+    `SELECT ${CARD_COLUMNS}, v.description
+     FROM (SELECT to_tsquery('simple', f_unaccent(?)) AS q) sq
+     JOIN videos_fts fts ON fts.document @@ sq.q JOIN videos v ON v.id = fts.id JOIN users u ON u.id = v.user_id
+     WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ?`,
     ...params,
   );
 }
 
-export function searchChannels(f: SearchFilters, limit = 20) {
+export async function searchChannels(f: SearchFilters, limit = 20) {
   const like = `%${f.q.trim().replace(/[%_]/g, "")}%`;
   const params: (string | number)[] = [like, like, like, like];
   let member = "";
@@ -381,9 +386,9 @@ export function searchChannels(f: SearchFilters, limit = 20) {
     params.push(f.member);
   }
   params.push(limit);
-  return all<ChannelCardData>(
+  return await all<ChannelCardData>(
     `SELECT ${CHANNEL_CARD} FROM users u ${LAST_VIDEO_JOIN}
-     WHERE ${PUBLISHERS} AND (u.name LIKE ? OR u.handle LIKE ? OR u.specialty LIKE ? OR u.bio LIKE ?) ${member}
+     WHERE ${PUBLISHERS} AND (u.name ILIKE ? OR u.handle ILIKE ? OR u.specialty ILIKE ? OR u.bio ILIKE ?) ${member}
      ORDER BY u.followers_count DESC LIMIT ?`,
     ...params,
   );
@@ -408,8 +413,8 @@ export type NotificationData = {
   video_thumb: string | null;
 };
 
-export function listNotifications(userId: string, limit = 50) {
-  return all<NotificationData>(
+export async function listNotifications(userId: string, limit = 50) {
+  return await all<NotificationData>(
     `SELECT n.id, n.type, n.text, n.read_at, n.created_at, n.video_id, n.comment_id,
        a.name AS actor_name, a.handle AS actor_handle, a.avatar_key AS actor_avatar,
        v.title AS video_title, v.thumb_key AS video_thumb
@@ -420,27 +425,27 @@ export function listNotifications(userId: string, limit = 50) {
   );
 }
 
-export function unreadCount(userId: string) {
-  return get<{ n: number }>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL", userId)?.n ?? 0;
+export async function unreadCount(userId: string) {
+  return (await get<{ n: number }>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL", userId))?.n ?? 0;
 }
 
 /* ------------------------------------------------------------------ */
 /* Estúdio do criador                                                  */
 /* ------------------------------------------------------------------ */
 
-export function studioVideos(userId: string) {
-  return all<VideoCardData & { status: string; visibility: string; description: string }>(
+export async function studioVideos(userId: string) {
+  return await all<VideoCardData & { status: string; visibility: string; description: string }>(
     `SELECT ${CARD_COLUMNS}, v.status, v.visibility, v.description ${FROM}
      WHERE v.user_id = ? AND v.status <> 'removed' ORDER BY v.created_at DESC`,
     userId,
   );
 }
 
-export function studioStats(userId: string) {
-  return get<{ videos: number; views: number; likes: number; comments: number; responses: number }>(
+export async function studioStats(userId: string) {
+  return (await get<{ videos: number; views: number; likes: number; comments: number; responses: number }>(
     `SELECT COUNT(*) AS videos, COALESCE(SUM(views),0) AS views, COALESCE(SUM(likes),0) AS likes,
        COALESCE(SUM(comments_count),0) AS comments, COALESCE(SUM(responses_count),0) AS responses
      FROM videos WHERE user_id = ? AND status = 'published'`,
     userId,
-  )!;
+  ))!;
 }

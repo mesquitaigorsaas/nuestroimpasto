@@ -25,8 +25,8 @@ const LABELS: Record<string, string> = {
   report_dismissed: "Descartou denúncia",
 };
 
-export default function AdminLog() {
-  const actions = listAdminActions();
+export default async function AdminLog() {
+  const actions = await listAdminActions();
   if (!actions.length) return <EmptyState icon="list" title="Nenhuma ação registrada ainda" />;
   return (
     <div className="card overflow-x-auto">

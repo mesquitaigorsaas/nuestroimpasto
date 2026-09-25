@@ -10,7 +10,7 @@ export const metadata = { title: "Publicar vídeo" };
 export default async function UploadPage({ searchParams }: { searchParams: Promise<{ reply?: string }> }) {
   const user = await requireUser("/studio/upload");
   const { reply } = await searchParams;
-  const parentVideo = reply ? getVideo(reply) : undefined;
+  const parentVideo = reply ? await getVideo(reply) : undefined;
   const parent = parentVideo && parentVideo.status === "published" ? { id: parentVideo.id, title: parentVideo.title, channel_name: parentVideo.channel_name } : null;
 
   if (!canPublish(user)) {

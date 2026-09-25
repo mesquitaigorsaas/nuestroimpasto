@@ -7,7 +7,7 @@ export const metadata = { title: "Administração" };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requireAdmin();
-  const m = adminMetrics();
+  const m = await adminMetrics();
   return (
     <PageContainer className="max-w-7xl">
       <div className="mb-5 flex items-center gap-3">

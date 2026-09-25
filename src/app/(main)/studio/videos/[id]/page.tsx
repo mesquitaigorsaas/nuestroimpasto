@@ -13,7 +13,7 @@ export const metadata = { title: "Editar vídeo" };
 export default async function EditVideoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireUser(`/studio/videos/${id}`);
-  const video = getVideo(id);
+  const video = await getVideo(id);
   if (!video || video.status === "removed" || (video.user_id !== user.id && user.role !== "admin")) notFound();
 
   return (

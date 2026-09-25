@@ -16,9 +16,12 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
   const type = sp.type === "student" || sp.type === "professional" || sp.type === "related" ? sp.type : undefined;
   const category = CATEGORIES.some((c) => c.slug === sp.cat) ? sp.cat : undefined;
   const sort = sp.sort === "new" ? "new" : "popular";
-  const channels = discoverChannels({ type, category, sort, limit: 30 });
+  const channels = await discoverChannels({ type, category, sort, limit: 30 });
+  const categoryShelves = await Promise.all(
+    CATEGORIES.filter((c) => c.slug !== "outros").map(async (c) => ({ c, videos: await trendingVideos(4, c.slug) })),
+  );
   const myFollows = new Set(
-    user ? all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", user.id).map((r) => r.following_id) : [],
+    user ? (await all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", user.id)).map((r) => r.following_id) : [],
   );
 
   const link = (patch: Partial<SP>) => {
@@ -77,8 +80,7 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
       <Shelf title="Descubra conteúdos" icon="sparkles">
         <p className="-mt-2 mb-2 text-sm text-muted">Os destaques de cada tema.</p>
       </Shelf>
-      {CATEGORIES.filter((c) => c.slug !== "outros").map((c) => {
-        const videos = trendingVideos(4, c.slug);
+      {categoryShelves.map(({ c, videos }) => {
         if (!videos.length) return null;
         return (
           <section key={c.slug} className="pb-8">

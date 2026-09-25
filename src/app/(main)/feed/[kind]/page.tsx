@@ -33,7 +33,7 @@ export default async function FeedPage({ params, searchParams }: { params: Promi
 
   if (kind === "trending") {
     const category = CATEGORIES.some((c) => c.slug === cat) ? cat : undefined;
-    const videos = trendingVideos(48, category);
+    const videos = await trendingVideos(48, category);
     return (
       <PageContainer>
         <PageTitle icon={meta.icon} title={meta.title} subtitle={meta.subtitle} />
@@ -53,8 +53,8 @@ export default async function FeedPage({ params, searchParams }: { params: Promi
   const u = user!;
 
   if (kind === "following") {
-    const videos = followingVideos(u.id, 60);
-    const channels = followingChannels(u.id);
+    const videos = await followingVideos(u.id, 60);
+    const channels = await followingChannels(u.id);
     return (
       <PageContainer>
         <PageTitle icon={meta.icon} title={meta.title} subtitle={meta.subtitle} />
@@ -85,7 +85,7 @@ export default async function FeedPage({ params, searchParams }: { params: Promi
   }
 
   if (kind === "history") {
-    const videos = historyVideos(u.id);
+    const videos = await historyVideos(u.id);
     return (
       <PageContainer className="max-w-5xl">
         <PageTitle icon={meta.icon} title={meta.title} subtitle={meta.subtitle} actions={videos.length ? <HistoryControls /> : undefined} />
@@ -105,7 +105,7 @@ export default async function FeedPage({ params, searchParams }: { params: Promi
     );
   }
 
-  const videos = kind === "saved" ? savedVideos(u.id) : likedVideos(u.id);
+  const videos = kind === "saved" ? await savedVideos(u.id) : await likedVideos(u.id);
   return (
     <PageContainer>
       <PageTitle icon={meta.icon} title={meta.title} subtitle={`${meta.subtitle} · ${videos.length} ${videos.length === 1 ? "vídeo" : "vídeos"}`} />

@@ -13,8 +13,8 @@ export const metadata = { title: "Você" };
 /** Página "Você" — equivalente à aba de biblioteca do app mobile. */
 export default async function YouPage() {
   const user = await requireUser("/you");
-  const history = historyVideos(user.id).slice(0, 10);
-  const saved = savedVideos(user.id).slice(0, 10);
+  const history = (await historyVideos(user.id)).slice(0, 10);
+  const saved = (await savedVideos(user.id)).slice(0, 10);
 
   const links: { href: string; icon: IconName; label: string }[] = [
     { href: `/@${user.handle}`, icon: "user", label: "Seu canal" },
@@ -74,7 +74,7 @@ export default async function YouPage() {
   );
 }
 
-function MiniShelf({ title, href, videos }: { title: string; href: string; videos: ReturnType<typeof savedVideos> }) {
+function MiniShelf({ title, href, videos }: { title: string; href: string; videos: Awaited<ReturnType<typeof savedVideos>> }) {
   return (
     <section className="mt-6">
       <div className="mb-3 flex items-center justify-between">

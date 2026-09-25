@@ -1,70 +1,76 @@
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import postgres from "postgres";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-import { ADDED_COLUMNS, SCHEMA } from "./schema";
 
-export const DATA_DIR = path.join(process.cwd(), "data");
+/**
+ * Banco Postgres (Supabase), acessado só pelo servidor.
+ * DATABASE_URL deve apontar para o pooler do Supabase (modo transaction, porta 6543).
+ * As consultas usam `?` como no SQLite original; convertemos para `$1, $2…`.
+ */
 
-const globalForDb = globalThis as unknown as { __nuestroDb?: DatabaseSync };
+type Sql = postgres.Sql;
 
-function open() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const database = new DatabaseSync(path.join(DATA_DIR, "nuestro.db"));
-  database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
-  database.exec(SCHEMA);
-  migrate(database);
-  return database;
-}
+const globalForDb = globalThis as unknown as { __nuestroSql?: Sql };
 
-function migrate(database: DatabaseSync) {
-  for (const [table, column, definition] of ADDED_COLUMNS) {
-    const cols = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    if (!cols.some((c) => c.name === column)) database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+function client(): Sql {
+  if (!globalForDb.__nuestroSql) {
+    const url = process.env.DATABASE_URL;
+    if (!url) throw new Error("DATABASE_URL não configurada (veja .env.example).");
+    globalForDb.__nuestroSql = postgres(url, {
+      prepare: false, // o pooler em modo transaction não suporta prepared statements
+      max: 5,
+      idle_timeout: 20,
+      onnotice: () => {},
+      // COUNT/SUM devolvem bigint/numeric; o app trabalha com number.
+      types: { number: { to: 20, from: [20, 1700], serialize: (x: number) => String(x), parse: (x: string) => Number(x) } },
+    });
   }
-  // Status antigo "pending" das solicitações passou a se chamar "pending_review".
-  database.exec("UPDATE verification_requests SET status = 'pending_review' WHERE status = 'pending'");
+  return globalForDb.__nuestroSql;
 }
 
-export function db(): DatabaseSync {
-  globalForDb.__nuestroDb ??= open();
-  return globalForDb.__nuestroDb;
+/** Transação em andamento na chamada atual (todas as consultas dentro dela usam a mesma conexão). */
+const txStore = new AsyncLocalStorage<postgres.TransactionSql>();
+
+function conn(): Sql {
+  return (txStore.getStore() as unknown as Sql | undefined) ?? client();
 }
 
-type Param = SQLInputValue | boolean | undefined;
+type Param = string | number | boolean | null | undefined;
 
-function normalize(params: Param[]): SQLInputValue[] {
-  return params.map((p) => (p === undefined ? null : typeof p === "boolean" ? (p ? 1 : 0) : p));
-}
-
-/** node:sqlite devolve objetos sem protótipo; convertemos para objetos simples (serializáveis pelo React). */
-export function all<T>(sql: string, ...params: Param[]): T[] {
-  return db()
-    .prepare(sql)
-    .all(...normalize(params))
-    .map((row) => ({ ...row }) as T);
-}
-
-export function get<T>(sql: string, ...params: Param[]): T | undefined {
-  const row = db().prepare(sql).get(...normalize(params));
-  return row ? ({ ...row } as T) : undefined;
-}
-
-export function run(sql: string, ...params: Param[]) {
-  return db().prepare(sql).run(...normalize(params));
-}
-
-export function transaction<T>(fn: () => T): T {
-  const database = db();
-  database.exec("BEGIN");
-  try {
-    const result = fn();
-    database.exec("COMMIT");
-    return result;
-  } catch (err) {
-    database.exec("ROLLBACK");
-    throw err;
+/** Troca os `?` (fora de strings) por `$1, $2…`. */
+function toPg(sql: string) {
+  let n = 0;
+  let out = "";
+  let inString = false;
+  for (const ch of sql) {
+    if (ch === "'") inString = !inString;
+    out += ch === "?" && !inString ? `$${++n}` : ch;
   }
+  return out;
+}
+
+function exec(sql: string, params: Param[]) {
+  return conn().unsafe(toPg(sql), params.map((p) => (p === undefined ? null : p)) as postgres.ParameterOrJSON<never>[]);
+}
+
+export async function all<T>(sql: string, ...params: Param[]): Promise<T[]> {
+  const rows = await exec(sql, params);
+  return rows.map((row) => ({ ...row }) as T);
+}
+
+export async function get<T>(sql: string, ...params: Param[]): Promise<T | undefined> {
+  const rows = await exec(sql, params);
+  return rows[0] ? ({ ...rows[0] } as T) : undefined;
+}
+
+export async function run(sql: string, ...params: Param[]) {
+  const rows = await exec(sql, params);
+  return { changes: rows.count };
+}
+
+export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
+  if (txStore.getStore()) return fn();
+  return (await client().begin((tx) => txStore.run(tx, fn))) as T;
 }
 
 /** Id curto, estilo YouTube (11 caracteres base64url). */

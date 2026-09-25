@@ -1,28 +1,38 @@
 /**
- * Dados de demonstração. Uso: npm run seed   (apaga e recria data/nuestro.db)
+ * Dados de demonstração. Uso: npm run seed
+ * ATENÇÃO: apaga TODOS os dados do banco em DATABASE_URL e recria a demo.
  * Todas as pessoas e canais aqui são fictícios.
  */
-import { DatabaseSync } from "node:sqlite";
+import postgres from "postgres";
 import { randomBytes, scryptSync } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { SCHEMA } from "../src/lib/schema.ts";
 
-const DATA = path.join(process.cwd(), "data");
-const DB_FILE = path.join(DATA, "nuestro.db");
-const THUMBS = path.join(DATA, "uploads", "thumbs");
-
-fs.mkdirSync(DATA, { recursive: true });
-for (const f of fs.existsSync(THUMBS) ? fs.readdirSync(THUMBS) : []) if (f.startsWith("demo-")) fs.rmSync(path.join(THUMBS, f));
+// Miniaturas dos vídeos de demonstração vão junto com o site (public/demo).
+const THUMBS = path.join(process.cwd(), "public", "demo");
+fs.rmSync(THUMBS, { recursive: true, force: true });
 fs.mkdirSync(THUMBS, { recursive: true });
 
-// Recria as tabelas no mesmo arquivo (o servidor de desenvolvimento pode estar com o banco aberto).
-const db = new DatabaseSync(DB_FILE);
-db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = OFF; PRAGMA busy_timeout = 5000;");
-const existing = db.prepare("SELECT name, type FROM sqlite_master WHERE type IN ('table') AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'videos_fts_%'").all() as { name: string }[];
-for (const t of existing) db.exec(`DROP TABLE IF EXISTS "${t.name}"`);
-db.exec("PRAGMA foreign_keys = ON;");
-db.exec(SCHEMA);
+if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL não configurada (.env.local).");
+const sql = postgres(process.env.DATABASE_URL, { prepare: false, onnotice: () => {} });
+
+/** Mesma interface usada antes com o SQLite: `?` vira $1, $2… */
+const toPg = (q: string) => {
+  let n = 0;
+  return q.replace(/\?/g, () => `$${++n}`);
+};
+type P = string | number | null;
+const db = {
+  prepare: (q: string) => ({
+    run: (...p: P[]) => sql.unsafe(toPg(q), p),
+    get: async (...p: P[]) => (await sql.unsafe(toPg(q), p))[0],
+  }),
+  exec: (q: string) => sql.unsafe(q),
+};
+
+// Apaga os dados atuais (a estrutura das tabelas fica no Supabase — veja supabase/migrations).
+await db.exec(`TRUNCATE users, sessions, verification_requests, verification_events, settings, videos, videos_fts, comments,
+  comment_likes, likes, follows, saves, history, notifications, reports, admin_actions CASCADE`);
 
 const id = (n = 8) => randomBytes(n).toString("base64url");
 const hash = (p: string) => {
@@ -57,7 +67,7 @@ const insUser = db.prepare(`INSERT INTO users (id, email, password_hash, name, h
 const pw = hash("impasto123");
 for (const u of USERS) {
   users[u.key] = id();
-  insUser.run(
+  await insUser.run(
     users[u.key], u.email, pw, u.name, u.handle, u.bio ?? "", u.specialty ?? "", u.location ?? "", u.instagram ?? "",
     u.role ?? "user", u.type, u.type === "viewer" ? "none" : "verified", ago(u.daysAgo * 24),
   );
@@ -150,17 +160,17 @@ const insVideo = db.prepare(`INSERT INTO videos (id, user_id, title, description
 const insFts = db.prepare("INSERT INTO videos_fts (id, title, description, tags, tech, channel) VALUES (?, ?, ?, ?, ?, ?)");
 const CAT_LABEL: Record<string, string> = { pizza: "Pizza", fermentacao: "Fermentação", massas: "Massas", panificacao: "Panificação", farinhas: "Farinhas", fornos: "Fornos", tecnicas: "Técnicas", bastidores: "Bastidores" };
 
-VIDEOS.forEach((v, i) => {
+for (const [i, v] of VIDEOS.entries()) {
   const vid = id();
   videos[v.key] = vid;
-  const thumbKey = `thumbs/demo-${vid}.svg`;
-  fs.writeFileSync(path.join(DATA, "uploads", thumbKey), thumb(v.thumbText, CAT_LABEL[v.cat] ?? "", i));
+  const thumbKey = `/demo/${v.key}.svg`;
+  fs.writeFileSync(path.join(THUMBS, `${v.key}.svg`), thumb(v.thumbText, CAT_LABEL[v.cat] ?? "", i));
   const tech = JSON.stringify(v.tech ?? {});
-  insVideo.run(vid, users[v.by], v.title, v.desc, v.cat, v.tags, thumbKey, v.dur, tech, v.parent ? videos[v.parent] : null, v.views, Math.round(v.views * (0.04 + Math.random() * 0.05)), ago(v.hours));
+  await insVideo.run(vid, users[v.by], v.title, v.desc, v.cat, v.tags, thumbKey, v.dur, tech, v.parent ? videos[v.parent] : null, v.views, Math.round(v.views * (0.04 + Math.random() * 0.05)), ago(v.hours));
   const u = USERS.find((x) => x.key === v.by)!;
-  insFts.run(vid, v.title, v.desc, v.tags.replace(/,/g, " "), Object.values(v.tech ?? {}).join(" "), `${u.name} ${u.handle}`);
-});
-db.exec("UPDATE videos SET responses_count = (SELECT COUNT(*) FROM videos r WHERE r.parent_id = videos.id)");
+  await insFts.run(vid, v.title, v.desc, v.tags.replace(/,/g, " "), Object.values(v.tech ?? {}).join(" "), `${u.name} ${u.handle}`);
+}
+await db.exec("UPDATE videos SET responses_count = (SELECT COUNT(*) FROM videos r WHERE r.parent_id = videos.id)");
 
 /* ---------------- Seguidores ---------------- */
 
@@ -177,63 +187,63 @@ const FOLLOWS: [string, string[]][] = [
   ["rafa", ["marco", "tiago"]],
 ];
 const insFollow = db.prepare("INSERT INTO follows (follower_id, following_id, created_at) VALUES (?, ?, ?)");
-for (const [who, list] of FOLLOWS) for (const t of list) insFollow.run(users[who], users[t], ago(rand(10, 900)));
+for (const [who, list] of FOLLOWS) for (const t of list) await insFollow.run(users[who], users[t], ago(rand(10, 900)));
 // Seguidores "externos" simulados para dar escala aos números
 const extra: Record<string, number> = { marco: 12800, helena: 5400, tiago: 8100, giulia: 3300, rafa: 6900, ana: 210, pedro: 95, admin: 1500 };
-db.exec(`UPDATE users SET
+await db.exec(`UPDATE users SET
   followers_count = (SELECT COUNT(*) FROM follows WHERE following_id = users.id),
   following_count = (SELECT COUNT(*) FROM follows WHERE follower_id = users.id)`);
-for (const [k, n] of Object.entries(extra)) db.prepare("UPDATE users SET followers_count = followers_count + ? WHERE id = ?").run(n, users[k]);
+for (const [k, n] of Object.entries(extra)) await db.prepare("UPDATE users SET followers_count = followers_count + ? WHERE id = ?").run(n, users[k]);
 
 /* ---------------- Comentários ---------------- */
 
 const insComment = db.prepare("INSERT INTO comments (id, video_id, user_id, parent_id, body, likes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
-function comment(video: string, by: string, body: string, hours: number, parent?: string, likes = rand(0, 40)) {
+async function comment(video: string, by: string, body: string, hours: number, parent?: string, likes = rand(0, 40)) {
   const cid = id();
-  insComment.run(cid, videos[video], users[by], parent ?? null, body, likes, ago(hours));
+  await insComment.run(cid, videos[video], users[by], parent ?? null, body, likes, ago(hours));
   return cid;
 }
 
-const c1 = comment("m2", "pedro", "Qual a temperatura da água que você usa na biga? Aqui no verão fica difícil segurar 16 °C.", 60, undefined, 34);
-comment("m2", "marco", "@pedro.fermenta uso água gelada, uns 4 °C, e deixo a biga numa caixa térmica com gelo reciclável no verão. Funciona bem.", 58, c1, 51);
-comment("m2", "helena", "Faço parecido no pão. Caixa térmica salva demais no verão.", 55, c1, 12);
-comment("m2", "ana", "Salvei pra testar na faculdade! Obrigada por mostrar sem esconder nada.", 40, undefined, 8);
-const c2 = comment("m2", "lucas", "Essa farinha W 300 é fácil de achar no Brasil?", 30, undefined, 5);
-comment("m2", "tiago", "@lucasm hoje já tem várias importadoras vendendo. Mas dá pra fazer com nacional ajustando a hidratação.", 28, c2, 9);
+const c1 = await comment("m2", "pedro", "Qual a temperatura da água que você usa na biga? Aqui no verão fica difícil segurar 16 °C.", 60, undefined, 34);
+await comment("m2", "marco", "@pedro.fermenta uso água gelada, uns 4 °C, e deixo a biga numa caixa térmica com gelo reciclável no verão. Funciona bem.", 58, c1, 51);
+await comment("m2", "helena", "Faço parecido no pão. Caixa térmica salva demais no verão.", 55, c1, 12);
+await comment("m2", "ana", "Salvei pra testar na faculdade! Obrigada por mostrar sem esconder nada.", 40, undefined, 8);
+const c2 = await comment("m2", "lucas", "Essa farinha W 300 é fácil de achar no Brasil?", 30, undefined, 5);
+await comment("m2", "tiago", "@lucasm hoje já tem várias importadoras vendendo. Mas dá pra fazer com nacional ajustando a hidratação.", 28, c2, 9);
 
-const c3 = comment("h3", "marco", "Já tive esse problema. No meu caso a farinha estava com W muito alto pra hidratação que eu usava. Tenta um descanso maior depois de bolear.", 10, undefined, 27);
-comment("h3", "helena", "@marco.albertini vou testar descanso de 30 min a mais. Obrigada!", 9, c3, 6);
-comment("h3", "pedro", "Temperatura da massa final também influencia. Mediu?", 8, undefined, 4);
-comment("h3", "giulia", "Na massa fresca eu vejo isso quando trabalho demais a massa. Talvez sova excessiva?", 7, undefined, 11);
+const c3 = await comment("h3", "marco", "Já tive esse problema. No meu caso a farinha estava com W muito alto pra hidratação que eu usava. Tenta um descanso maior depois de bolear.", 10, undefined, 27);
+await comment("h3", "helena", "@marco.albertini vou testar descanso de 30 min a mais. Obrigada!", 9, c3, 6);
+await comment("h3", "pedro", "Temperatura da massa final também influencia. Mediu?", 8, undefined, 4);
+await comment("h3", "giulia", "Na massa fresca eu vejo isso quando trabalho demais a massa. Talvez sova excessiva?", 7, undefined, 11);
 
-comment("m1", "tiago", "200 no sábado com forno a lenha é outro nível. Quantos pizzaiolos na bancada?", 18, undefined, 14);
-comment("m1", "carla", "Que organização! Deu fome assistindo.", 15, undefined, 3);
-comment("m3", "pedro", "Refiz esse teste com farinha nacional, postei como resposta em vídeo!", 39, undefined, 19);
-comment("m3", "rafa", "O cornicione de 70% ficou absurdo.", 120, undefined, 7);
-comment("t2", "marco", "Resultado honesto. Forno elétrico bem usado faz pizza muito boa sim.", 200, undefined, 44);
-comment("t2", "joao", "Qual o consumo mensal aproximado?", 50, undefined, 2);
-comment("r1", "marco", "Que achado! Acompanhando a série.", 25, undefined, 9);
-comment("g1", "helena", "A dobra no final é uma aula. Obrigada por mostrar a receita da nonna.", 80, undefined, 13);
-comment("a1", "marco", "Muito bom pra primeira! Dica: deixa a bolinha chegar em temperatura ambiente antes de abrir.", 55, undefined, 22);
-comment("a1", "helena", "Continua postando a evolução, é muito legal de acompanhar.", 50, undefined, 6);
-comment("h1", "ana", "Começando o meu levain hoje seguindo esse vídeo!", 30, undefined, 5);
-comment("p1", "helena", "Planilha é vida. Manda o link quando terminar!", 10, undefined, 3);
+await comment("m1", "tiago", "200 no sábado com forno a lenha é outro nível. Quantos pizzaiolos na bancada?", 18, undefined, 14);
+await comment("m1", "carla", "Que organização! Deu fome assistindo.", 15, undefined, 3);
+await comment("m3", "pedro", "Refiz esse teste com farinha nacional, postei como resposta em vídeo!", 39, undefined, 19);
+await comment("m3", "rafa", "O cornicione de 70% ficou absurdo.", 120, undefined, 7);
+await comment("t2", "marco", "Resultado honesto. Forno elétrico bem usado faz pizza muito boa sim.", 200, undefined, 44);
+await comment("t2", "joao", "Qual o consumo mensal aproximado?", 50, undefined, 2);
+await comment("r1", "marco", "Que achado! Acompanhando a série.", 25, undefined, 9);
+await comment("g1", "helena", "A dobra no final é uma aula. Obrigada por mostrar a receita da nonna.", 80, undefined, 13);
+await comment("a1", "marco", "Muito bom pra primeira! Dica: deixa a bolinha chegar em temperatura ambiente antes de abrir.", 55, undefined, 22);
+await comment("a1", "helena", "Continua postando a evolução, é muito legal de acompanhar.", 50, undefined, 6);
+await comment("h1", "ana", "Começando o meu levain hoje seguindo esse vídeo!", 30, undefined, 5);
+await comment("p1", "helena", "Planilha é vida. Manda o link quando terminar!", 10, undefined, 3);
 
-db.exec(`UPDATE comments SET replies_count = (SELECT COUNT(*) FROM comments r WHERE r.parent_id = comments.id)`);
-db.exec(`UPDATE videos SET comments_count = (SELECT COUNT(*) FROM comments c WHERE c.video_id = videos.id)`);
+await db.exec(`UPDATE comments SET replies_count = (SELECT COUNT(*) FROM comments r WHERE r.parent_id = comments.id)`);
+await db.exec(`UPDATE videos SET comments_count = (SELECT COUNT(*) FROM comments c WHERE c.video_id = videos.id)`);
 
 /* ---------------- Curtidas, salvos, histórico ---------------- */
 
-const insLike = db.prepare("INSERT OR IGNORE INTO likes (user_id, video_id) VALUES (?, ?)");
-const insHist = db.prepare("INSERT OR IGNORE INTO history (user_id, video_id, watched_at) VALUES (?, ?, ?)");
+const insLike = db.prepare("INSERT INTO likes (user_id, video_id) VALUES (?, ?) ON CONFLICT DO NOTHING");
+const insHist = db.prepare("INSERT INTO history (user_id, video_id, watched_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING");
 for (const u of ["lucas", "carla", "joao", "ana", "pedro"]) {
   for (const v of Object.keys(videos)) {
-    if (Math.random() < 0.35) insLike.run(users[u], videos[v]);
-    if (Math.random() < 0.5) insHist.run(users[u], videos[v], ago(rand(1, 200)));
+    if (Math.random() < 0.35) await insLike.run(users[u], videos[v]);
+    if (Math.random() < 0.5) await insHist.run(users[u], videos[v], ago(rand(1, 200)));
   }
 }
-db.prepare("INSERT INTO saves (user_id, video_id) VALUES (?, ?)").run(users.lucas, videos.m2);
-db.prepare("INSERT INTO saves (user_id, video_id) VALUES (?, ?)").run(users.lucas, videos.r2);
+await db.prepare("INSERT INTO saves (user_id, video_id) VALUES (?, ?)").run(users.lucas, videos.m2);
+await db.prepare("INSERT INTO saves (user_id, video_id) VALUES (?, ?)").run(users.lucas, videos.r2);
 
 /* ---------------- Verificação e moderação (exemplos para o painel) ---------------- */
 
@@ -277,20 +287,20 @@ const verifRequests: [string, string, Record<string, string>, number][] = [
 ];
 for (const [who, type, data, hours] of verifRequests) {
   const vid = id();
-  insVerif.run(vid, users[who], type, JSON.stringify(data), ago(hours), ago(hours), ago(hours));
-  db.prepare("INSERT INTO verification_events (id, request_id, actor_id, event, reason, created_at) VALUES (?, ?, ?, 'submitted', 'Solicitação enviada.', ?)").run(
+  await insVerif.run(vid, users[who], type, JSON.stringify(data), ago(hours), ago(hours), ago(hours));
+  await db.prepare("INSERT INTO verification_events (id, request_id, actor_id, event, reason, created_at) VALUES (?, ?, ?, 'submitted', 'Solicitação enviada.', ?)").run(
     id(),
     vid,
     users[who],
     ago(hours),
   );
-  db.prepare("UPDATE users SET verification_status = 'pending' WHERE id = ?").run(users[who]);
+  await db.prepare("UPDATE users SET verification_status = 'pending' WHERE id = ?").run(users[who]);
 }
 
-db.prepare(`INSERT INTO reports (id, reporter_id, target_type, target_id, reason, details, created_at) VALUES (?, ?, 'comment', ?, 'spam', ?, ?)`).run(
+await db.prepare(`INSERT INTO reports (id, reporter_id, target_type, target_id, reason, details, created_at) VALUES (?, ?, 'comment', ?, 'spam', ?, ?)`).run(
   id(),
   users.helena,
-  (db.prepare("SELECT id FROM comments WHERE body LIKE 'Qual o consumo%'").get() as { id: string }).id,
+  ((await db.prepare("SELECT id FROM comments WHERE body LIKE 'Qual o consumo%'").get()) as { id: string }).id,
   "Exemplo de denúncia para testar o painel.",
   ago(2),
 );
@@ -298,11 +308,13 @@ db.prepare(`INSERT INTO reports (id, reporter_id, target_type, target_id, reason
 /* ---------------- Notificações ---------------- */
 
 const insNotif = db.prepare("INSERT INTO notifications (id, user_id, actor_id, type, video_id, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
-insNotif.run(id(), users.helena, users.tiago, "video_response", videos.resp1, "Minha massa está ficando muito elástica. O que pode ser?", ago(6));
-insNotif.run(id(), users.marco, users.pedro, "video_response", videos.resp2, "Testei 65% contra 70% de hidratação no mesmo dia", ago(40));
-insNotif.run(id(), users.marco, users.ana, "follow", null, "", ago(30));
-insNotif.run(id(), users.lucas, users.marco, "new_video", videos.m1, "", ago(20));
+await insNotif.run(id(), users.helena, users.tiago, "video_response", videos.resp1, "Minha massa está ficando muito elástica. O que pode ser?", ago(6));
+await insNotif.run(id(), users.marco, users.pedro, "video_response", videos.resp2, "Testei 65% contra 70% de hidratação no mesmo dia", ago(40));
+await insNotif.run(id(), users.marco, users.ana, "follow", null, "", ago(30));
+await insNotif.run(id(), users.lucas, users.marco, "new_video", videos.m1, "", ago(20));
 
 console.log(`✔ Banco recriado: ${USERS.length} usuários, ${VIDEOS.length} vídeos.`);
 console.log("  Senha de todas as contas de demonstração: impasto123");
 console.log("  admin@nuestroimpasto.com (admin) · marco@demo.com (profissional) · ana@demo.com (estudante) · lucas@demo.com · carla@demo.com · joao@demo.com (membros com verificação pendente)");
+
+await sql.end();

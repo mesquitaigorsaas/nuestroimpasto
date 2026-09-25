@@ -26,7 +26,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   );
 
   if (category) {
-    const videos = forYou(user?.id ?? null, 48, category);
+    const videos = await forYou(user?.id ?? null, 48, category);
     return (
       <PageContainer className="pt-0">
         {chips}
@@ -39,13 +39,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     );
   }
 
-  const feed = forYou(user?.id ?? null, 36);
-  const following = user ? followingVideos(user.id, 8) : [];
-  const trending = trendingVideos(8);
-  const discussions = activeDiscussions(4);
-  const creators = newCreators(5, user?.id);
+  const feed = await forYou(user?.id ?? null, 36);
+  const following = user ? await followingVideos(user.id, 8) : [];
+  const trending = await trendingVideos(8);
+  const discussions = await activeDiscussions(4);
+  const creators = await newCreators(5, user?.id);
   const followedIds = new Set(
-    user ? all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", user.id).map((r) => r.following_id) : [],
+    user ? (await all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", user.id)).map((r) => r.following_id) : [],
   );
 
   if (feed.length === 0) {

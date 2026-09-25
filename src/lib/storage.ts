@@ -1,84 +1,77 @@
-import fs from "node:fs";
-import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import { DATA_DIR, newId } from "./db";
+import { newId } from "./db";
 
 /**
- * Abstração de armazenamento. No MVP grava em disco local (pasta data/uploads).
- * Para produção, implementar a mesma interface com Cloudflare R2 / Stream, Mux ou Supabase Storage.
+ * Arquivos no Supabase Storage (API REST, só no servidor).
+ * - bucket "media" (público): videos/, thumbs/, avatars/, banners/
+ * - bucket "private": documentos da verificação (chaves "private/…"), só admins leem.
+ * O navegador envia o arquivo direto para o Storage com uma URL assinada — o arquivo
+ * não passa pelo nosso servidor (a Vercel limita o corpo das requisições a ~4,5 MB).
  */
-export interface StorageProvider {
-  save(kind: StorageKind, body: ReadableStream<Uint8Array> | Buffer, ext: string, maxBytes: number): Promise<string>;
-  stat(key: string): { size: number } | null;
-  stream(key: string, range?: { start: number; end: number }): ReadableStream<Uint8Array>;
-  remove(key: string): void;
-}
 
 export type StorageKind = "videos" | "thumbs" | "avatars" | "banners" | "private";
 
-const ROOT = path.join(DATA_DIR, "uploads");
-
-function resolveKey(key: string) {
-  const full = path.resolve(ROOT, key);
-  if (!full.startsWith(path.resolve(ROOT) + path.sep)) throw new Error("Chave inválida");
-  return full;
+function config() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !secret) throw new Error("NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SECRET_KEY não configuradas (veja .env.example).");
+  return { url: `${url}/storage/v1`, headers: { apikey: secret, Authorization: `Bearer ${secret}` } };
 }
 
-export class FileTooLargeError extends Error {}
+/** "private/abc.pdf" → bucket private, objeto abc.pdf; demais → bucket media, objeto = chave. */
+function locate(key: string) {
+  if (key.includes("..") || key.startsWith("/")) throw new Error("Chave inválida");
+  return key.startsWith("private/")
+    ? { bucket: "private", object: key.slice("private/".length) }
+    : { bucket: "media", object: key };
+}
 
-class LocalStorage implements StorageProvider {
-  async save(kind: StorageKind, body: ReadableStream<Uint8Array> | Buffer, ext: string, maxBytes: number) {
-    const safeExt = ext.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 5) || "bin";
-    const key = `${kind}/${newId(12)}.${safeExt}`;
-    const full = resolveKey(key);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
+/** Reserva uma chave nova e devolve a URL assinada para o navegador enviar o arquivo (PUT). */
+export async function createUpload(kind: StorageKind, ext: string) {
+  const safeExt = ext.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 5) || "bin";
+  const key = `${kind}/${newId(12)}.${safeExt}`;
+  const { bucket, object } = locate(key);
+  const { url, headers } = config();
+  const res = await fetch(`${url}/object/upload/sign/${bucket}/${object}`, { method: "POST", headers });
+  if (!res.ok) throw new Error(`Storage: falha ao assinar upload (${res.status})`);
+  const data = (await res.json()) as { url: string };
+  return { key, uploadUrl: `${url}${data.url}` };
+}
 
-    if (Buffer.isBuffer(body)) {
-      if (body.length > maxBytes) throw new FileTooLargeError();
-      fs.writeFileSync(full, body);
-      return key;
-    }
+/** O arquivo existe no Storage? (valida chaves enviadas pelo navegador antes de salvar no banco) */
+export async function exists(key: string) {
+  try {
+    const { bucket, object } = locate(key);
+    const { url, headers } = config();
+    const res = await fetch(`${url}/object/info/${bucket}/${object}`, { headers, cache: "no-store" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
-    let written = 0;
-    const source = Readable.fromWeb(body as import("node:stream/web").ReadableStream<Uint8Array>);
-    source.on("data", (chunk: Buffer) => {
-      written += chunk.length;
-      if (written > maxBytes) source.destroy(new FileTooLargeError());
+export async function remove(key: string) {
+  try {
+    const { bucket, object } = locate(key);
+    const { url, headers } = config();
+    await fetch(`${url}/object/${bucket}`, {
+      method: "DELETE",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ prefixes: [object] }),
     });
-    try {
-      await pipeline(source, fs.createWriteStream(full));
-    } catch (err) {
-      fs.rmSync(full, { force: true });
-      throw err;
-    }
-    return key;
-  }
-
-  stat(key: string) {
-    try {
-      const s = fs.statSync(resolveKey(key));
-      return s.isFile() ? { size: s.size } : null;
-    } catch {
-      return null;
-    }
-  }
-
-  stream(key: string, range?: { start: number; end: number }) {
-    const node = fs.createReadStream(resolveKey(key), range);
-    return Readable.toWeb(node) as ReadableStream<Uint8Array>;
-  }
-
-  remove(key: string) {
-    try {
-      fs.rmSync(resolveKey(key), { force: true });
-    } catch {
-      /* já removido */
-    }
+  } catch {
+    /* já removido */
   }
 }
 
-export const storage: StorageProvider = new LocalStorage();
+/** Baixa um arquivo (usado para documentos privados). */
+export async function download(key: string) {
+  const { bucket, object } = locate(key);
+  const { url, headers } = config();
+  const res = await fetch(`${url}/object/${bucket}/${object}`, { headers, cache: "no-store" });
+  return res.ok && res.body ? res : null;
+}
+
+export const storage = { createUpload, exists, remove, download };
 
 export const MIME: Record<string, string> = {
   mp4: "video/mp4",

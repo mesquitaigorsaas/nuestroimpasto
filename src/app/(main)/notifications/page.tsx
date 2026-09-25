@@ -37,7 +37,7 @@ function describe(n: NotificationData): { icon: IconName; color: string; text: R
 
 export default async function NotificationsPage() {
   const user = await requireUser("/notifications");
-  const items = listNotifications(user.id);
+  const items = await listNotifications(user.id);
   const hasUnread = items.some((n) => !n.read_at);
 
   return (

@@ -5,7 +5,7 @@ export function mediaUrl(key: string | null | undefined) {
   if (!key) return null;
   if (key.startsWith("http") || key.startsWith("/")) return key;
   if (key.startsWith("private/")) return null;
-  return `/media/${key}`;
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/media/${key}`;
 }
 
 export function compactNumber(n: number) {

@@ -56,10 +56,10 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
 
   const showVideos = filters.kind !== "channels";
   const showChannels = filters.kind === "all" || filters.kind === "channels";
-  const videos = showVideos ? (q ? searchVideos(filters) : activeDiscussions(30)) : [];
-  const channels = showChannels && q ? searchChannels(filters, filters.kind === "channels" ? 30 : 4) : [];
+  const videos = showVideos ? (q ? await searchVideos(filters) : await activeDiscussions(30)) : [];
+  const channels = showChannels && q ? await searchChannels(filters, filters.kind === "channels" ? 30 : 4) : [];
   const myFollows = new Set(
-    user ? all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", user.id).map((r) => r.following_id) : [],
+    user ? (await all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", user.id)).map((r) => r.following_id) : [],
   );
 
   return (

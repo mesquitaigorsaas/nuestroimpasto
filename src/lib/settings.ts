@@ -6,10 +6,10 @@ export const SETTINGS = {
   verificationAutoApprove: { key: "verification.auto_approve", default: "false" },
 } as const;
 
-export function getSetting(s: (typeof SETTINGS)[keyof typeof SETTINGS]) {
-  return get<{ value: string }>("SELECT value FROM settings WHERE key = ?", s.key)?.value ?? s.default;
+export async function getSetting(s: (typeof SETTINGS)[keyof typeof SETTINGS]) {
+  return (await get<{ value: string }>("SELECT value FROM settings WHERE key = ?", s.key))?.value ?? s.default;
 }
 
-export function setSetting(s: (typeof SETTINGS)[keyof typeof SETTINGS], value: string) {
-  run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", s.key, value);
+export async function setSetting(s: (typeof SETTINGS)[keyof typeof SETTINGS], value: string) {
+  await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", s.key, value);
 }

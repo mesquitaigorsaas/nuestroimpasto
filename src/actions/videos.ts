@@ -45,20 +45,20 @@ export async function createVideoAction(_: ActionState, form: FormData): Promise
   const duration = Math.max(0, Math.round(Number(form.get("duration") ?? 0)) || 0);
   const parentId = String(form.get("parent_id") ?? "") || null;
 
-  if (!videoKey.startsWith("videos/") || !storage.stat(videoKey)) fieldErrors.video = "Envie o arquivo de vídeo antes de publicar.";
-  else if (get("SELECT 1 FROM videos WHERE video_key = ?", videoKey)) fieldErrors.video = "Este arquivo já foi publicado.";
-  if (thumbKey && (!thumbKey.startsWith("thumbs/") || !storage.stat(thumbKey))) fieldErrors.thumb = "Miniatura inválida.";
+  if (!videoKey.startsWith("videos/") || !(await storage.exists(videoKey))) fieldErrors.video = "Envie o arquivo de vídeo antes de publicar.";
+  else if (await get("SELECT 1 FROM videos WHERE video_key = ?", videoKey)) fieldErrors.video = "Este arquivo já foi publicado.";
+  if (thumbKey && (!thumbKey.startsWith("thumbs/") || !(await storage.exists(thumbKey)))) fieldErrors.thumb = "Miniatura inválida.";
 
   let parent: { id: string; user_id: string; title: string } | undefined;
   if (parentId) {
-    parent = get("SELECT id, user_id, title FROM videos WHERE id = ? AND status = 'published'", parentId);
+    parent = await get("SELECT id, user_id, title FROM videos WHERE id = ? AND status = 'published'", parentId);
     if (!parent) fieldErrors.parent = "O vídeo original não está mais disponível.";
   }
   if (Object.keys(fieldErrors).length) return { fieldErrors, error: "Revise os campos destacados." };
 
   const id = newId();
-  transaction(() => {
-    run(
+  await transaction(async () => {
+    await run(
       `INSERT INTO videos (id, user_id, title, description, category, tags, video_key, thumb_key, duration, tech, parent_id, visibility)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
@@ -74,15 +74,15 @@ export async function createVideoAction(_: ActionState, form: FormData): Promise
       parent?.id ?? null,
       visibility,
     );
-    indexVideo(id);
+    await indexVideo(id);
 
     if (parent) {
-      run("UPDATE videos SET responses_count = responses_count + 1 WHERE id = ?", parent.id);
-      notify({ userId: parent.user_id, actorId: user.id, type: "video_response", videoId: id, text: parent.title });
+      await run("UPDATE videos SET responses_count = responses_count + 1 WHERE id = ?", parent.id);
+      await notify({ userId: parent.user_id, actorId: user.id, type: "video_response", videoId: id, text: parent.title });
     }
     if (visibility === "public") {
-      for (const f of all<{ follower_id: string }>("SELECT follower_id FROM follows WHERE following_id = ?", user.id)) {
-        notify({ userId: f.follower_id, actorId: user.id, type: "new_video", videoId: id });
+      for (const f of await all<{ follower_id: string }>("SELECT follower_id FROM follows WHERE following_id = ?", user.id)) {
+        await notify({ userId: f.follower_id, actorId: user.id, type: "new_video", videoId: id });
       }
     }
   });
@@ -94,7 +94,7 @@ export async function createVideoAction(_: ActionState, form: FormData): Promise
 async function ownVideo(videoId: string) {
   const user = await getCurrentUser();
   if (!user) return null;
-  const video = get<{ id: string; user_id: string; video_key: string | null; thumb_key: string | null; parent_id: string | null }>(
+  const video = await get<{ id: string; user_id: string; video_key: string | null; thumb_key: string | null; parent_id: string | null }>(
     "SELECT id, user_id, video_key, thumb_key, parent_id FROM videos WHERE id = ?",
     videoId,
   );
@@ -109,11 +109,11 @@ export async function updateVideoAction(_: ActionState, form: FormData): Promise
 
   const { title, description, category, visibility, tags, tech, fieldErrors } = validateCommon(form);
   const thumbKey = String(form.get("thumb_key") ?? "") || null;
-  if (thumbKey && thumbKey !== owned.video.thumb_key && (!thumbKey.startsWith("thumbs/") || !storage.stat(thumbKey)))
+  if (thumbKey && thumbKey !== owned.video.thumb_key && (!thumbKey.startsWith("thumbs/") || !(await storage.exists(thumbKey))))
     fieldErrors.thumb = "Miniatura inválida.";
   if (Object.keys(fieldErrors).length) return { fieldErrors, error: "Revise os campos destacados." };
 
-  run(
+  await run(
     `UPDATE videos SET title = ?, description = ?, category = ?, tags = ?, tech = ?, visibility = ?, thumb_key = COALESCE(?, thumb_key) WHERE id = ?`,
     title,
     description,
@@ -124,8 +124,8 @@ export async function updateVideoAction(_: ActionState, form: FormData): Promise
     thumbKey,
     videoId,
   );
-  if (thumbKey && owned.video.thumb_key && thumbKey !== owned.video.thumb_key) storage.remove(owned.video.thumb_key);
-  indexVideo(videoId);
+  if (thumbKey && owned.video.thumb_key && thumbKey !== owned.video.thumb_key) void storage.remove(owned.video.thumb_key);
+  await indexVideo(videoId);
   revalidatePath(`/watch/${videoId}`);
   revalidatePath("/studio");
   return { ok: true, message: "Alterações salvas." };
@@ -134,27 +134,27 @@ export async function updateVideoAction(_: ActionState, form: FormData): Promise
 export async function deleteVideoAction(videoId: string) {
   const owned = await ownVideo(videoId);
   if (!owned) return { error: "Você não pode excluir este vídeo." };
-  transaction(() => {
-    if (owned.video.parent_id) run("UPDATE videos SET responses_count = MAX(0, responses_count - 1) WHERE id = ?", owned.video.parent_id);
-    run("DELETE FROM videos_fts WHERE id = ?", videoId);
-    run("DELETE FROM videos WHERE id = ?", videoId);
+  await transaction(async () => {
+    if (owned.video.parent_id) await run("UPDATE videos SET responses_count = GREATEST(0, responses_count - 1) WHERE id = ?", owned.video.parent_id);
+    await run("DELETE FROM videos_fts WHERE id = ?", videoId);
+    await run("DELETE FROM videos WHERE id = ?", videoId);
   });
-  if (owned.video.video_key) storage.remove(owned.video.video_key);
-  if (owned.video.thumb_key) storage.remove(owned.video.thumb_key);
+  if (owned.video.video_key) void storage.remove(owned.video.video_key);
+  if (owned.video.thumb_key) void storage.remove(owned.video.thumb_key);
   revalidatePath("/", "layout");
   return { ok: true };
 }
 
 /** Conta visualização e registra no histórico. O cliente chama uma vez por sessão por vídeo. */
 export async function recordViewAction(videoId: string) {
-  const video = get<{ id: string }>("SELECT id FROM videos WHERE id = ? AND status = 'published'", videoId);
+  const video = await get<{ id: string }>("SELECT id FROM videos WHERE id = ? AND status = 'published'", videoId);
   if (!video) return;
-  run("UPDATE videos SET views = views + 1 WHERE id = ?", videoId);
+  await run("UPDATE videos SET views = views + 1 WHERE id = ?", videoId);
   const user = await getCurrentUser();
   if (user) {
-    run(
+    await run(
       `INSERT INTO history (user_id, video_id) VALUES (?, ?)
-       ON CONFLICT (user_id, video_id) DO UPDATE SET watched_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')`,
+       ON CONFLICT (user_id, video_id) DO UPDATE SET watched_at = now_iso()`,
       user.id,
       videoId,
     );

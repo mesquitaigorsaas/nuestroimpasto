@@ -19,7 +19,7 @@ type Params = { params: Promise<{ id: string }>; searchParams: Promise<{ c?: str
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { id } = await params;
-  const video = getVideo(id);
+  const video = await getVideo(id);
   if (!video) return { title: "Vídeo não encontrado" };
   return { title: video.title, description: video.description.slice(0, 160) };
 }
@@ -28,18 +28,18 @@ export default async function WatchPage({ params, searchParams }: Params) {
   const { id } = await params;
   const { c, published } = await searchParams;
   const user = await getCurrentUser();
-  const video = getVideo(id);
+  const video = await getVideo(id);
 
   const isOwner = !!user && video?.user_id === user.id;
   const isAdmin = user?.role === "admin";
   if (!video || video.status === "removed" || (video.status === "hidden" && !isOwner && !isAdmin)) notFound();
 
   const sort = c === "new" ? "new" : "top";
-  const state = viewerVideoState(user?.id, video);
-  const comments = topComments(video.id, user?.id ?? null, sort);
-  const responses = videoResponses(video.id);
-  const parent = video.parent_id ? getVideo(video.parent_id) : undefined;
-  const related = relatedVideos(video, 18);
+  const state = await viewerVideoState(user?.id, video);
+  const comments = await topComments(video.id, user?.id ?? null, sort);
+  const responses = await videoResponses(video.id);
+  const parent = video.parent_id ? await getVideo(video.parent_id) : undefined;
+  const related = await relatedVideos(video, 18);
   const tech = parseJson<TechInfo>(video.tech, {});
 
   return (

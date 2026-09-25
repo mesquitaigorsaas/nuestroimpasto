@@ -3,9 +3,9 @@ import { adminMetrics, growthSeries } from "@/lib/admin-queries";
 import { compactNumber } from "@/lib/format";
 import { Icon, type IconName } from "@/components/icons";
 
-export default function AdminOverview() {
-  const m = adminMetrics();
-  const series = growthSeries();
+export default async function AdminOverview() {
+  const m = await adminMetrics();
+  const series = await growthSeries();
   const max = Math.max(1, ...series.map((d) => Math.max(d.users, d.videos)));
 
   const cards: { label: string; value: number; sub: string; icon: IconName; tone: string }[] = [

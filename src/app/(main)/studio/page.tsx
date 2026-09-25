@@ -12,8 +12,8 @@ export const metadata = { title: "Estúdio do criador" };
 
 export default async function StudioPage() {
   const user = await requireUser("/studio");
-  const stats = studioStats(user.id);
-  const videos = studioVideos(user.id);
+  const stats = await studioStats(user.id);
+  const videos = await studioVideos(user.id);
   const publisher = canPublish(user);
 
   const cards: { label: string; value: string; icon: IconName; color: string }[] = [

@@ -6,7 +6,7 @@ type Props = { params: Promise<{ handle: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { handle } = await params;
-  const c = getChannelByHandle(decodeURIComponent(handle).replace(/^@/, ""));
+  const c = await getChannelByHandle(decodeURIComponent(handle).replace(/^@/, ""));
   return c ? { title: `${c.name} (@${c.handle})`, description: c.bio.slice(0, 160) } : { title: "Canal não encontrado" };
 }
 

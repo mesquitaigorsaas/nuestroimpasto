@@ -19,14 +19,14 @@ const ACTION = {
 
 export default async function VerificationDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const r = getVerification(id);
+  const r = await getVerification(id);
   if (!r) notFound();
   const data = parseJson<Record<string, string>>(r.data, {});
   const evidence = parseJson<EvidenceItem[]>(r.evidence, []);
   const fraud = parseJson<FraudSignal[]>(r.fraud_signals, []);
   const ai = parseJson<AnalysisResult | null>(r.ai_result, null);
-  const events = verificationEvents(r.id);
-  const history = userVerificationHistory(r.user_id, r.id);
+  const events = await verificationEvents(r.id);
+  const history = await userVerificationHistory(r.user_id, r.id);
   const evById = new Map(evidence.map((e) => [e.id, e]));
   const fields = VERIFICATION_FIELDS[r.type] ?? [];
   const finalized = r.status === "approved" || r.status === "rejected";

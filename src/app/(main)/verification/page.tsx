@@ -15,7 +15,7 @@ const TONE = { none: "gray", pending: "gold", under_review: "gold", verified: "g
 export default async function VerificationPage({ searchParams }: { searchParams: Promise<{ type?: string }> }) {
   const user = await requireUser("/verification");
   const { type } = await searchParams;
-  const last = get<{ type: VerificationType; status: string; admin_note: string; data: string; created_at: string; updated_at: string; reviewed_at: string | null }>(
+  const last = await get<{ type: VerificationType; status: string; admin_note: string; data: string; created_at: string; updated_at: string; reviewed_at: string | null }>(
     "SELECT type, status, admin_note, data, created_at, updated_at, reviewed_at FROM verification_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
     user.id,
   );

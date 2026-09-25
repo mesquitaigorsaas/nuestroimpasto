@@ -26,13 +26,13 @@ export async function signupAction(_: ActionState, form: FormData): Promise<Acti
   if (handle.length < 3) fieldErrors.handle = "O @ precisa ter pelo menos 3 caracteres (letras, números, ponto ou _).";
   else if (RESERVED.has(handle)) fieldErrors.handle = "Esse @ é reservado. Escolha outro.";
 
-  if (!fieldErrors.email && get("SELECT 1 FROM users WHERE email = ?", email)) fieldErrors.email = "Já existe uma conta com esse e-mail.";
-  if (!fieldErrors.handle && get("SELECT 1 FROM users WHERE handle = ? COLLATE NOCASE", handle))
+  if (!fieldErrors.email && await get("SELECT 1 FROM users WHERE email = ?", email)) fieldErrors.email = "Já existe uma conta com esse e-mail.";
+  if (!fieldErrors.handle && await get("SELECT 1 FROM users WHERE lower(handle) = lower(?)", handle))
     fieldErrors.handle = "Esse @ já está em uso.";
   if (Object.keys(fieldErrors).length) return { fieldErrors };
 
   const id = newId();
-  run(
+  await run(
     "INSERT INTO users (id, email, password_hash, name, handle) VALUES (?, ?, ?, ?, ?)",
     id,
     email,
@@ -48,7 +48,7 @@ export async function signupAction(_: ActionState, form: FormData): Promise<Acti
 export async function loginAction(_: ActionState, form: FormData): Promise<ActionState> {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
-  const user = get<{ id: string; password_hash: string; status: string }>(
+  const user = await get<{ id: string; password_hash: string; status: string }>(
     "SELECT id, password_hash, status FROM users WHERE email = ?",
     email,
   );

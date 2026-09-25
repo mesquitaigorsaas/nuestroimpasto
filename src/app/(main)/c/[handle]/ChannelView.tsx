@@ -24,11 +24,11 @@ const TABS: { key: ChannelTab; label: string }[] = [
 
 export async function ChannelView({ handle, tab, sort }: { handle: string; tab: ChannelTab; sort?: string }) {
   const decoded = decodeURIComponent(handle).replace(/^@/, "");
-  const channel = getChannelByHandle(decoded);
+  const channel = await getChannelByHandle(decoded);
   if (!channel || channel.status === "banned") notFound();
   const viewer = await getCurrentUser();
   const isMe = viewer?.id === channel.id;
-  const following = viewer ? !!get("SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?", viewer.id, channel.id) : false;
+  const following = viewer ? !!await get("SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?", viewer.id, channel.id) : false;
   const isPublisher = isPublisherType(channel.member_type);
   const banner = mediaUrl(channel.banner_key);
   const base = `/@${channel.handle}`;
@@ -158,8 +158,8 @@ export async function ChannelView({ handle, tab, sort }: { handle: string; tab: 
   );
 }
 
-function HomeTab({ channelId, name, isMe, isPublisher }: { channelId: string; name: string; isMe: boolean; isPublisher: boolean }) {
-  const recent = channelVideos(channelId, "new");
+async function HomeTab({ channelId, name, isMe, isPublisher }: { channelId: string; name: string; isMe: boolean; isPublisher: boolean }) {
+  const recent = await channelVideos(channelId, "new");
   if (!recent.length) {
     return (
       <EmptyState
@@ -171,7 +171,7 @@ function HomeTab({ channelId, name, isMe, isPublisher }: { channelId: string; na
     );
   }
   const [featured, ...rest] = recent;
-  const popular = channelVideos(channelId, "popular").slice(0, 8);
+  const popular = (await channelVideos(channelId, "popular")).slice(0, 8);
   return (
     <>
       <div className="grid gap-4 border-b border-line pb-8 md:grid-cols-[minmax(0,420px)_1fr]">
@@ -194,9 +194,9 @@ function HomeTab({ channelId, name, isMe, isPublisher }: { channelId: string; na
   );
 }
 
-function VideosTab({ channelId, base, sort, isMe }: { channelId: string; base: string; sort?: string; isMe: boolean }) {
+async function VideosTab({ channelId, base, sort, isMe }: { channelId: string; base: string; sort?: string; isMe: boolean }) {
   const s = sort === "popular" ? "popular" : sort === "old" ? "old" : "new";
-  const videos = channelVideos(channelId, s);
+  const videos = await channelVideos(channelId, s);
   return (
     <>
       <div className="mb-5 flex gap-2">
@@ -215,8 +215,8 @@ function VideosTab({ channelId, base, sort, isMe }: { channelId: string; base: s
   );
 }
 
-function ResponsesTab({ channelId }: { channelId: string }) {
-  const videos = channelVideos(channelId, "new", true);
+async function ResponsesTab({ channelId }: { channelId: string }) {
+  const videos = await channelVideos(channelId, "new", true);
   return videos.length ? (
     <VideoGrid videos={videos} hideChannel />
   ) : (
@@ -224,12 +224,12 @@ function ResponsesTab({ channelId }: { channelId: string }) {
   );
 }
 
-function FollowersTab({ channelId, viewerId }: { channelId: string; viewerId?: string }) {
-  const followers = followList(channelId, "followers");
-  const following = followList(channelId, "following");
+async function FollowersTab({ channelId, viewerId }: { channelId: string; viewerId?: string }) {
+  const followers = await followList(channelId, "followers");
+  const following = await followList(channelId, "following");
   const myFollows = new Set(
     viewerId
-      ? (get<{ ids: string }>("SELECT group_concat(following_id) AS ids FROM follows WHERE follower_id = ?", viewerId)?.ids ?? "").split(",")
+      ? ((await get<{ ids: string }>("SELECT string_agg(following_id, ',') AS ids FROM follows WHERE follower_id = ?", viewerId))?.ids ?? "").split(",")
       : [],
   );
   const grid = "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5";

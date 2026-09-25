@@ -31,7 +31,7 @@ export async function requestVerificationAction(_: VerificationActionState, form
   if (fields.instagram && !/^@?[\w.]{1,30}$|instagram\.com\/[\w.]{1,30}/i.test(fields.instagram)) fieldErrors.instagram = "Informe só o @ do perfil.";
 
   const documentKey = String(form.get("document_key") ?? "") || null;
-  if (documentKey && (!documentKey.startsWith("private/") || !storage.stat(documentKey))) fieldErrors.document = "Arquivo inválido. Envie novamente.";
+  if (documentKey && (!documentKey.startsWith("private/") || !(await storage.exists(documentKey)))) fieldErrors.document = "Arquivo inválido. Envie novamente.";
   if (form.get("consent") !== "on") fieldErrors.consent = "É preciso autorizar o uso dos dados para a verificação.";
   if (Object.keys(fieldErrors).length) return { fieldErrors, error: "Revise os campos destacados." };
 

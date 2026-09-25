@@ -22,7 +22,7 @@ const FILTERS = {
 export default async function AdminUsers({ searchParams }: { searchParams: Promise<{ q?: string; f?: string }> }) {
   const { q = "", f = "" } = await searchParams;
   const me = await getCurrentUser();
-  const users = listUsers(q.trim(), f);
+  const users = await listUsers(q.trim(), f);
 
   return (
     <div className="flex flex-col gap-5">

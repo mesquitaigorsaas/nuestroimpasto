@@ -16,9 +16,9 @@ export default async function AdminVerifications({ searchParams }: { searchParam
   const { f } = await searchParams;
   const filter: VerificationFilter = f && f in VERIFICATION_FILTERS ? (f as VerificationFilter) : "queue";
   await analyzePending();
-  const rows = listVerifications(filter);
-  const counts = verificationCounts();
-  const auto = getSetting(SETTINGS.verificationAutoApprove) === "true";
+  const rows = await listVerifications(filter);
+  const counts = await verificationCounts();
+  const auto = await getSetting(SETTINGS.verificationAutoApprove) === "true";
   const ai = aiEnabled();
 
   return (

@@ -82,7 +82,7 @@ export function UploadFlow({ parent }: { parent: Parent }) {
     if (!f) return;
     setError("");
     if (!f.type.startsWith("video/") && !/\.(mp4|mov|webm|m4v)$/i.test(f.name)) return setError("Escolha um arquivo de vídeo (MP4, MOV ou WebM).");
-    if (f.size > MAX_VIDEO_BYTES) return setError("O vídeo pode ter até 1 GB nesta versão.");
+    if (f.size > MAX_VIDEO_BYTES) return setError("O vídeo pode ter até 50 MB nesta versão.");
     setFile(f);
     setProgress(0);
     const up = uploadFile(f, "video", extOf(f), setProgress);
@@ -127,7 +127,7 @@ export function UploadFlow({ parent }: { parent: Parent }) {
             <Icon name="upload" size={42} className="text-basil" />
           </span>
           <p className="mt-5 text-lg font-semibold">Arraste o vídeo aqui ou toque para escolher</p>
-          <p className="mt-1 text-sm text-muted">MP4, MOV ou WebM · até 1 GB · horizontal ou vertical</p>
+          <p className="mt-1 text-sm text-muted">MP4, MOV ou WebM · até 50 MB · horizontal ou vertical</p>
           <span className="btn btn-red mt-6 h-11 px-6">Selecionar arquivo</span>
           <input type="file" accept="video/*" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
         </label>

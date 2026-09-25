@@ -11,7 +11,7 @@ const TARGET = { video: "Vídeo", comment: "Comentário", user: "Usuário" } as 
 export default async function AdminReports({ searchParams }: { searchParams: Promise<{ s?: string }> }) {
   const { s } = await searchParams;
   const status = s && s in FILTERS ? s : "open";
-  const reports = listReports(status);
+  const reports = await listReports(status);
 
   return (
     <div className="flex flex-col gap-5">

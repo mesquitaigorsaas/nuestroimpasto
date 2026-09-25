@@ -1,31 +1,33 @@
 import { all, get } from "./db";
 
-export function adminMetrics() {
-  const n = (sql: string) => get<{ n: number }>(sql)?.n ?? 0;
-  return {
-    users: n("SELECT COUNT(*) AS n FROM users"),
-    usersWeek: n("SELECT COUNT(*) AS n FROM users WHERE created_at > datetime('now','-7 days')"),
-    publishers: n("SELECT COUNT(*) AS n FROM users WHERE member_type IN ('student','professional','related')"),
-    professionals: n("SELECT COUNT(*) AS n FROM users WHERE member_type = 'professional'"),
-    students: n("SELECT COUNT(*) AS n FROM users WHERE member_type = 'student'"),
-    videos: n("SELECT COUNT(*) AS n FROM videos WHERE status = 'published'"),
-    videosWeek: n("SELECT COUNT(*) AS n FROM videos WHERE created_at > datetime('now','-7 days')"),
-    responses: n("SELECT COUNT(*) AS n FROM videos WHERE parent_id IS NOT NULL"),
-    comments: n("SELECT COUNT(*) AS n FROM comments"),
-    commentsWeek: n("SELECT COUNT(*) AS n FROM comments WHERE created_at > datetime('now','-7 days')"),
-    views: n("SELECT COALESCE(SUM(views),0) AS n FROM videos"),
-    pendingVerifications: n("SELECT COUNT(*) AS n FROM verification_requests WHERE status IN ('pending_review','under_review','review_required')"),
-    openReports: n("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"),
+export async function adminMetrics() {
+  const metrics = {
+    users: "SELECT COUNT(*) FROM users",
+    usersWeek: "SELECT COUNT(*) FROM users WHERE created_at > datetime('now','-7 days')",
+    publishers: "SELECT COUNT(*) FROM users WHERE member_type IN ('student','professional','related')",
+    professionals: "SELECT COUNT(*) FROM users WHERE member_type = 'professional'",
+    students: "SELECT COUNT(*) FROM users WHERE member_type = 'student'",
+    videos: "SELECT COUNT(*) FROM videos WHERE status = 'published'",
+    videosWeek: "SELECT COUNT(*) FROM videos WHERE created_at > datetime('now','-7 days')",
+    responses: "SELECT COUNT(*) FROM videos WHERE parent_id IS NOT NULL",
+    comments: "SELECT COUNT(*) FROM comments",
+    commentsWeek: "SELECT COUNT(*) FROM comments WHERE created_at > datetime('now','-7 days')",
+    views: "SELECT COALESCE(SUM(views),0) FROM videos",
+    pendingVerifications: "SELECT COUNT(*) FROM verification_requests WHERE status IN ('pending_review','under_review','review_required')",
+    openReports: "SELECT COUNT(*) FROM reports WHERE status = 'open'",
   };
+  // Uma única ida ao banco com todas as contagens.
+  const select = Object.entries(metrics).map(([k, sql]) => `(${sql}) AS "${k}"`).join(", ");
+  return (await get<Record<keyof typeof metrics, number>>(`SELECT ${select}`))!;
 }
 
 /** Novos usuários e vídeos por dia (últimos 30 dias). */
-export function growthSeries() {
-  const users = all<{ d: string; n: number }>(
-    "SELECT date(created_at) AS d, COUNT(*) AS n FROM users WHERE created_at > datetime('now','-30 days') GROUP BY d",
+export async function growthSeries() {
+  const users = await all<{ d: string; n: number }>(
+    "SELECT left(created_at, 10) AS d, COUNT(*) AS n FROM users WHERE created_at > datetime('now','-30 days') GROUP BY d",
   );
-  const videos = all<{ d: string; n: number }>(
-    "SELECT date(created_at) AS d, COUNT(*) AS n FROM videos WHERE created_at > datetime('now','-30 days') GROUP BY d",
+  const videos = await all<{ d: string; n: number }>(
+    "SELECT left(created_at, 10) AS d, COUNT(*) AS n FROM videos WHERE created_at > datetime('now','-30 days') GROUP BY d",
   );
   const days: { d: string; users: number; videos: number }[] = [];
   for (let i = 29; i >= 0; i--) {
@@ -81,25 +83,25 @@ export const VERIFICATION_FILTERS = {
 
 export type VerificationFilter = keyof typeof VERIFICATION_FILTERS;
 
-export function listVerifications(filter: VerificationFilter) {
+export async function listVerifications(filter: VerificationFilter) {
   const f = VERIFICATION_FILTERS[filter] ?? VERIFICATION_FILTERS.queue;
   const order =
     filter === "queue"
       ? "CASE r.status WHEN 'review_required' THEN 0 WHEN 'under_review' THEN 1 ELSE 2 END, r.created_at ASC"
       : "r.updated_at DESC";
-  return all<VerificationRow>(`${VERIF_SELECT} WHERE ${f.where} ORDER BY ${order} LIMIT 300`);
+  return await all<VerificationRow>(`${VERIF_SELECT} WHERE ${f.where} ORDER BY ${order} LIMIT 300`);
 }
 
-export function verificationCounts() {
+export async function verificationCounts() {
   const out = {} as Record<VerificationFilter, number>;
   for (const [k, f] of Object.entries(VERIFICATION_FILTERS)) {
-    out[k as VerificationFilter] = get<{ n: number }>(`SELECT COUNT(*) AS n FROM verification_requests r WHERE ${f.where}`)?.n ?? 0;
+    out[k as VerificationFilter] = (await get<{ n: number }>(`SELECT COUNT(*) AS n FROM verification_requests r WHERE ${f.where}`))?.n ?? 0;
   }
   return out;
 }
 
-export function getVerification(id: string) {
-  return get<VerificationRow>(`${VERIF_SELECT} WHERE r.id = ?`, id);
+export async function getVerification(id: string) {
+  return await get<VerificationRow>(`${VERIF_SELECT} WHERE r.id = ?`, id);
 }
 
 export type VerificationEventRow = {
@@ -114,16 +116,16 @@ export type VerificationEventRow = {
   actor_name: string | null;
 };
 
-export function verificationEvents(requestId: string) {
-  return all<VerificationEventRow>(
+export async function verificationEvents(requestId: string) {
+  return await all<VerificationEventRow>(
     `SELECT e.*, u.name AS actor_name FROM verification_events e LEFT JOIN users u ON u.id = e.actor_id
-     WHERE e.request_id = ? ORDER BY e.created_at DESC, e.rowid DESC`,
+     WHERE e.request_id = ? ORDER BY e.created_at DESC, e.seq DESC`,
     requestId,
   );
 }
 
-export function userVerificationHistory(userId: string, excludeId: string) {
-  return all<{ id: string; type: string; status: string; created_at: string }>(
+export async function userVerificationHistory(userId: string, excludeId: string) {
+  return await all<{ id: string; type: string; status: string; created_at: string }>(
     "SELECT id, type, status, created_at FROM verification_requests WHERE user_id = ? AND id <> ? ORDER BY created_at DESC",
     userId,
     excludeId,
@@ -148,9 +150,9 @@ export type ReportRow = {
   same_target_count: number;
 };
 
-export function listReports(status: string) {
+export async function listReports(status: string) {
   const where = status === "all" ? "1=1" : "r.status = ?";
-  return all<ReportRow>(
+  return await all<ReportRow>(
     `SELECT r.id, r.target_type, r.target_id, r.reason, r.details, r.status, r.resolution, r.created_at,
        ru.name AS reporter_name, ru.handle AS reporter_handle,
        CASE r.target_type
@@ -196,11 +198,11 @@ export type AdminUserRow = {
   reports: number;
 };
 
-export function listUsers(q: string, filter: string) {
+export async function listUsers(q: string, filter: string) {
   const where: string[] = [];
   const params: string[] = [];
   if (q) {
-    where.push("(u.name LIKE ? OR u.handle LIKE ? OR u.email LIKE ?)");
+    where.push("(u.name ILIKE ? OR u.handle ILIKE ? OR u.email ILIKE ?)");
     const like = `%${q}%`;
     params.push(like, like, like);
   }
@@ -213,7 +215,7 @@ export function listUsers(q: string, filter: string) {
     params.push(filter);
   }
   if (filter === "admin") where.push("u.role = 'admin'");
-  return all<AdminUserRow>(
+  return await all<AdminUserRow>(
     `SELECT u.id, u.name, u.handle, u.email, u.avatar_key, u.role, u.member_type, u.verification_status, u.status,
        u.followers_count, u.created_at,
        (SELECT COUNT(*) FROM videos v WHERE v.user_id = u.id) AS videos,
@@ -223,8 +225,8 @@ export function listUsers(q: string, filter: string) {
   );
 }
 
-export function listAdminActions() {
-  return all<{ id: string; action: string; target_type: string; target_id: string; note: string; created_at: string; admin_name: string; target_label: string | null }>(
+export async function listAdminActions() {
+  return await all<{ id: string; action: string; target_type: string; target_id: string; note: string; created_at: string; admin_name: string; target_label: string | null }>(
     `SELECT a.id, a.action, a.target_type, a.target_id, a.note, a.created_at, u.name AS admin_name,
        CASE a.target_type
          WHEN 'user' THEN (SELECT '@' || handle FROM users WHERE id = a.target_id)
@@ -236,8 +238,8 @@ export function listAdminActions() {
   );
 }
 
-export function listRecentVideos() {
-  return all<{ id: string; title: string; status: string; created_at: string; views: number; channel: string; handle: string; thumb_key: string | null; duration: number; category: string }>(
+export async function listRecentVideos() {
+  return await all<{ id: string; title: string; status: string; created_at: string; views: number; channel: string; handle: string; thumb_key: string | null; duration: number; category: string }>(
     `SELECT v.id, v.title, v.status, v.created_at, v.views, v.thumb_key, v.duration, v.category, u.name AS channel, u.handle
      FROM videos v JOIN users u ON u.id = v.user_id ORDER BY v.created_at DESC LIMIT 100`,
   );

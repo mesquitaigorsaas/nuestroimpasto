@@ -31,7 +31,7 @@ function tokenHash(token: string) {
 export async function createSession(userId: string) {
   const token = randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_DAYS * 86400_000);
-  run("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)", tokenHash(token), userId, expires.toISOString());
+  await run("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)", tokenHash(token), userId, expires.toISOString());
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -45,7 +45,7 @@ export async function createSession(userId: string) {
 export async function destroySession() {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
-  if (token) run("DELETE FROM sessions WHERE id = ?", tokenHash(token));
+  if (token) await run("DELETE FROM sessions WHERE id = ?", tokenHash(token));
   jar.delete(SESSION_COOKIE);
 }
 
@@ -58,7 +58,7 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  const user = get<User & { expires_at: string }>(
+  const user = await get<User & { expires_at: string }>(
     `SELECT ${USER_COLUMNS}, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
     tokenHash(token),
   );

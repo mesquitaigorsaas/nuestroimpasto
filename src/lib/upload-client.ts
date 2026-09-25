@@ -1,4 +1,7 @@
-/** Upload do navegador para /api/upload com progresso (XHR permite acompanhar o envio). */
+/**
+ * Upload do navegador: pede ao servidor uma URL assinada (/api/upload) e envia o arquivo
+ * direto para o Supabase Storage, com progresso (XHR permite acompanhar o envio).
+ */
 export function uploadFile(
   body: Blob,
   type: "video" | "thumb" | "avatar" | "banner" | "document",
@@ -6,26 +9,37 @@ export function uploadFile(
   onProgress?: (pct: number) => void,
 ): { promise: Promise<string>; abort: () => void } {
   const xhr = new XMLHttpRequest();
-  const promise = new Promise<string>((resolve, reject) => {
-    xhr.open("PUT", `/api/upload?type=${type}&ext=${encodeURIComponent(ext)}`);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => {
-      let data: { key?: string; error?: string } = {};
-      try {
-        data = JSON.parse(xhr.responseText);
-      } catch {
-        /* resposta não-JSON */
-      }
-      if (xhr.status >= 200 && xhr.status < 300 && data.key) resolve(data.key);
-      else reject(new Error(data.error ?? "Falha no envio."));
-    };
-    xhr.onerror = () => reject(new Error("Falha de conexão durante o envio."));
-    xhr.onabort = () => reject(new Error("Envio cancelado."));
-    xhr.send(body);
-  });
-  return { promise, abort: () => xhr.abort() };
+  let aborted = false;
+  const promise = (async () => {
+    const res = await fetch(`/api/upload?type=${type}&ext=${encodeURIComponent(ext)}&size=${body.size}`, { method: "POST" });
+    const data = (await res.json().catch(() => ({}))) as { key?: string; uploadUrl?: string; contentType?: string; error?: string };
+    if (!res.ok || !data.key || !data.uploadUrl) throw new Error(data.error ?? "Falha no envio.");
+    if (aborted) throw new Error("Envio cancelado.");
+
+    await new Promise<void>((resolve, reject) => {
+      xhr.open("PUT", data.uploadUrl!);
+      xhr.setRequestHeader("Content-Type", data.contentType ?? "application/octet-stream");
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) return resolve();
+        const tooLarge = xhr.status === 413 || /size|large/i.test(xhr.responseText);
+        reject(new Error(tooLarge ? "Arquivo grande demais." : "Falha no envio."));
+      };
+      xhr.onerror = () => reject(new Error("Falha de conexão durante o envio."));
+      xhr.onabort = () => reject(new Error("Envio cancelado."));
+      xhr.send(body);
+    });
+    return data.key;
+  })();
+  return {
+    promise,
+    abort: () => {
+      aborted = true;
+      xhr.abort();
+    },
+  };
 }
 
 export function extOf(file: File) {
