@@ -98,7 +98,6 @@ export async function forYou(viewerId: string | null, limit = 24, category?: str
   const maxAffinity = Math.max(1, ...affinity.values());
 
   const scored = candidates
-    .filter((v) => v.user_id !== viewerId)
     .map((v) => {
       const engagement = Math.log10(1 + v.views + v.likes * 4 + v.comments_count * 6 + v.responses_count * 8);
       const freshness = 1 / Math.pow(1 + v.age_hours / 48, 0.8);
@@ -106,8 +105,10 @@ export async function forYou(viewerId: string | null, limit = 24, category?: str
       const followBoost = followed.has(v.user_id) ? 0.8 : 0;
       const newCreatorBoost = v.channel_videos <= 3 ? 0.5 : 0;
       const seenPenalty = v.watched ? -1.2 : 0;
+      // Os próprios vídeos aparecem (quem publica quer se ver), mas abaixo dos de outros canais.
+      const ownPenalty = v.user_id === viewerId ? -1.5 : 0;
       const jitter = Math.random() * 0.35; // variedade entre visitas
-      return { v, score: engagement * 0.6 + freshness * 2 + categoryBoost * 1.5 + followBoost + newCreatorBoost + seenPenalty + jitter };
+      return { v, score: engagement * 0.6 + freshness * 2 + categoryBoost * 1.5 + followBoost + newCreatorBoost + seenPenalty + ownPenalty + jitter };
     })
     .sort((a, b) => b.score - a.score);
 
