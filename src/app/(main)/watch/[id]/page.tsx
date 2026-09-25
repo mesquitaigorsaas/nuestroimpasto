@@ -149,7 +149,7 @@ export default async function WatchPage({ params, searchParams }: Params) {
             {responses.length > 0 ? (
               <div className="no-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
                 {responses.map((r) => (
-                  <Link key={r.id} href={`/watch/${r.id}`} className="w-56 shrink-0">
+                  <Link key={r.id} href={`/watch/${r.id}`} className="w-56 shrink-0" data-impression={r.id}>
                     <Thumbnail video={r} className="rounded-lg" />
                     <p className="mt-1.5 line-clamp-2 text-sm font-semibold">{r.title}</p>
                     <p className="flex items-center gap-1 text-xs text-muted">

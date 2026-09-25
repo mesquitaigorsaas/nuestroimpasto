@@ -30,7 +30,7 @@ export function Thumbnail({ video, className = "" }: { video: Pick<VideoCardData
 
 export function VideoCard({ video, hideChannel = false }: { video: VideoCardData; hideChannel?: boolean }) {
   return (
-    <div className="group flex flex-col gap-3">
+    <div className="group flex flex-col gap-3" data-impression={video.id}>
       <Link href={`/watch/${video.id}`} className="block" aria-label={video.title}>
         <Thumbnail video={video} />
       </Link>
@@ -82,7 +82,7 @@ function CardBadges({ video }: { video: VideoCardData }) {
 export function VideoRow({ video, size = "sm", extra }: { video: VideoCardData & { description?: string }; size?: "sm" | "lg"; extra?: React.ReactNode }) {
   const large = size === "lg";
   return (
-    <div className={`group flex gap-3 ${large ? "flex-col sm:flex-row sm:gap-4" : ""}`}>
+    <div className={`group flex gap-3 ${large ? "flex-col sm:flex-row sm:gap-4" : ""}`} data-impression={video.id}>
       <Link href={`/watch/${video.id}`} className={`shrink-0 ${large ? "w-full sm:w-[360px]" : "w-40 sm:w-[168px]"}`}>
         <Thumbnail video={video} className={large ? "" : "rounded-lg"} />
       </Link>

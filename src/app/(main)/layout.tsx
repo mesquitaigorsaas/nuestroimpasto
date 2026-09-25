@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { AppShell } from "@/components/shell/AppShell";
+import { ImpressionTracker } from "@/components/video/ImpressionTracker";
 import { getCurrentUser } from "@/lib/auth";
 import { followingChannels, unreadCount } from "@/lib/queries";
 
@@ -18,6 +20,9 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   return (
     <AppShell user={shellUser} unread={user ? await unreadCount(user.id) : 0} following={user ? await followingChannels(user.id) : []}>
       {children}
+      <Suspense fallback={null}>
+        <ImpressionTracker />
+      </Suspense>
     </AppShell>
   );
 }

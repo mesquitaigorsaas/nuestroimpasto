@@ -60,55 +60,92 @@ export async function activeDiscussions(limit = 8) {
   )).filter((v) => v.recent_activity > 0);
 }
 
+/* Médias assumidas para vídeos com poucos dados (evita que 1 clique ou 1 visita decida tudo). */
+const PRIOR_CTR = 0.05; // 5% de quem vê a miniatura clica
+const PRIOR_CTR_WEIGHT = 100; // equivale a 100 impressões "médias"
+const PRIOR_RETENTION = 0.4; // assiste 40% do vídeo, em média
+const PRIOR_RETENTION_WEIGHT = 5; // equivale a 5 sessões "médias"
+
+type Signals = Pick<VideoCardData, "duration"> & { impressions: number; clicks: number; watch_seconds: number; watch_sessions: number };
+
+/** Taxa de clique suavizada: de quem viu a miniatura, quantos clicaram. */
+export function clickRate(v: Signals) {
+  return (v.clicks + PRIOR_CTR * PRIOR_CTR_WEIGHT) / (v.impressions + PRIOR_CTR_WEIGHT);
+}
+
+/** Retenção suavizada: fração média do vídeo que as pessoas assistem (0 a 1). */
+export function retention(v: Signals) {
+  if (!v.duration) return PRIOR_RETENTION;
+  const r =
+    (v.watch_seconds + PRIOR_RETENTION * PRIOR_RETENTION_WEIGHT * v.duration) / ((v.watch_sessions + PRIOR_RETENTION_WEIGHT) * v.duration);
+  return Math.min(1, r);
+}
+
 /**
- * "Para você": recomendação simples e explicável.
- * Candidatos recentes → pontuação por afinidade de categoria, canais seguidos,
- * engajamento, novidade e empurrão para criadores novos. Evita ordenar só por views.
+ * "Para você" — inspirado no que o YouTube divulga sobre a página inicial:
+ *  1. Satisfação com o vídeo: retenção (quanto as pessoas assistem) e taxa de clique.
+ *  2. Personalização: temas e canais que a pessoa assiste (por tempo assistido), curte e salva; inscrições.
+ *  3. Novidade, com um empurrão para criadores novos.
+ *  4. Não repetir o que a pessoa já assistiu inteiro; os próprios vídeos não aparecem (ficam no canal/Estúdio).
+ * Visualizações brutas pesam pouco. No máximo 2 vídeos por canal no topo.
  */
 export async function forYou(viewerId: string | null, limit = 24, category?: string) {
-  const candidates = await all<VideoCardData & { age_hours: number; channel_videos: number; watched: number }>(
-    `SELECT ${CARD_COLUMNS},
+  const candidates = await all<VideoCardData & Signals & { age_hours: number; channel_videos: number; progress: number | null }>(
+    `SELECT ${CARD_COLUMNS}, v.impressions, v.clicks, v.watch_seconds, v.watch_sessions,
        (julianday('now') - julianday(v.created_at)) * 24 AS age_hours,
        (SELECT COUNT(*) FROM videos x WHERE x.user_id = v.user_id AND x.status = 'published') AS channel_videos,
-       ${viewerId ? "EXISTS (SELECT 1 FROM history h WHERE h.user_id = ? AND h.video_id = v.id)" : "0"} AS watched
-     ${FROM} WHERE ${LISTABLE} ${category ? "AND v.category = ?" : ""}
+       ${viewerId ? "(SELECT h.progress FROM history h WHERE h.user_id = ? AND h.video_id = v.id)" : "NULL"} AS progress
+     ${FROM} WHERE ${LISTABLE} ${viewerId ? "AND v.user_id <> ?" : ""} ${category ? "AND v.category = ?" : ""}
      ORDER BY v.created_at DESC LIMIT 400`,
-    ...[viewerId, category].filter((p): p is string => !!p),
+    ...[viewerId, viewerId, category].filter((p): p is string => !!p),
   );
 
-  const affinity = new Map<string, number>();
-  const followed = new Set<string>();
+  // Interesses da pessoa: tempo assistido (até 10 min por vídeo), curtidas e salvos, por tema e por canal.
+  const topic = new Map<string, number>();
+  const channel = new Map<string, number>();
+  const subscribed = new Set<string>();
   if (viewerId) {
-    for (const row of await all<{ category: string; w: number }>(
-      `SELECT v.category, SUM(w) AS w FROM (
-         SELECT video_id, 3 AS w FROM likes WHERE user_id = ?
+    const rows = await all<{ category: string; user_id: string; w: number }>(
+      `SELECT v.category, v.user_id, SUM(w) AS w FROM (
+         SELECT video_id, 1 + LEAST(seconds_watched / 60.0, 10) AS w FROM history WHERE user_id = ?
+         UNION ALL SELECT video_id, 3 FROM likes WHERE user_id = ?
          UNION ALL SELECT video_id, 2 FROM saves WHERE user_id = ?
-         UNION ALL SELECT video_id, 1 FROM history WHERE user_id = ?
-       ) s JOIN videos v ON v.id = s.video_id GROUP BY v.category`,
+       ) s JOIN videos v ON v.id = s.video_id GROUP BY v.category, v.user_id`,
       viewerId,
       viewerId,
       viewerId,
-    )) {
-      affinity.set(row.category, row.w);
+    );
+    for (const r of rows) {
+      topic.set(r.category, (topic.get(r.category) ?? 0) + r.w);
+      channel.set(r.user_id, (channel.get(r.user_id) ?? 0) + r.w);
     }
-    for (const row of await all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", viewerId)) {
-      followed.add(row.following_id);
+    for (const r of await all<{ following_id: string }>("SELECT following_id FROM follows WHERE follower_id = ?", viewerId)) {
+      subscribed.add(r.following_id);
     }
   }
-  const maxAffinity = Math.max(1, ...affinity.values());
+  const maxTopic = Math.max(1, ...topic.values());
+  const maxChannel = Math.max(1, ...channel.values());
 
   const scored = candidates
     .map((v) => {
-      const engagement = Math.log10(1 + v.views + v.likes * 4 + v.comments_count * 6 + v.responses_count * 8);
-      const freshness = 1 / Math.pow(1 + v.age_hours / 48, 0.8);
-      const categoryBoost = (affinity.get(v.category) ?? 0) / maxAffinity;
-      const followBoost = followed.has(v.user_id) ? 0.8 : 0;
-      const newCreatorBoost = v.channel_videos <= 3 ? 0.5 : 0;
-      const seenPenalty = v.watched ? -1.2 : 0;
-      // Os próprios vídeos aparecem (quem publica quer se ver), mas abaixo dos de outros canais.
-      const ownPenalty = v.user_id === viewerId ? -1.5 : 0;
-      const jitter = Math.random() * 0.35; // variedade entre visitas
-      return { v, score: engagement * 0.6 + freshness * 2 + categoryBoost * 1.5 + followBoost + newCreatorBoost + seenPenalty + ownPenalty + jitter };
+      // 1. Satisfação (média = 1 em cada)
+      const retentionScore = retention(v) / PRIOR_RETENTION;
+      const ctrScore = Math.min(3, clickRate(v) / PRIOR_CTR);
+      const interaction = Math.log10(1 + v.likes + v.comments_count * 2 + v.responses_count * 4);
+      const popularity = Math.log10(1 + v.views);
+      const quality = retentionScore * 1.6 + ctrScore * 1.0 + interaction * 0.3 + popularity * 0.25;
+      // 2. Personalização
+      const personal =
+        ((topic.get(v.category) ?? 0) / maxTopic) * 1.5 +
+        ((channel.get(v.user_id) ?? 0) / maxChannel) * 1.0 +
+        (subscribed.has(v.user_id) ? 1.2 : 0);
+      // 3. Novidade e criadores novos
+      const freshness = 1.5 / Math.pow(1 + v.age_hours / 48, 0.8);
+      const newCreator = v.channel_videos <= 3 ? 0.4 : 0;
+      // 4. Já assistido: inteiro some do topo; parcial desce um pouco
+      const seen = v.progress === null ? 0 : v.progress >= 0.9 ? -3 : -1;
+      const jitter = Math.random() * 0.3; // variedade entre visitas
+      return { v, score: quality + personal + freshness + newCreator + seen + jitter };
     })
     .sort((a, b) => b.score - a.score);
 
@@ -119,7 +156,7 @@ export async function forYou(viewerId: string | null, limit = 24, category?: str
   for (const { v } of scored) {
     const n = perChannel.get(v.user_id) ?? 0;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { age_hours, channel_videos, watched, ...card } = v;
+    const { age_hours, channel_videos, progress, impressions, clicks, watch_seconds, watch_sessions, ...card } = v;
     if (n < 2) {
       result.push(card);
       perChannel.set(v.user_id, n + 1);
