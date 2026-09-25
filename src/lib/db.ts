@@ -10,12 +10,18 @@ import { randomBytes } from "node:crypto";
 
 type Sql = postgres.Sql;
 
-const globalForDb = globalThis as unknown as { __nuestroSql?: Sql };
+const globalForDb = globalThis as unknown as { __nuestroSql?: Sql; __nuestroSqlUrl?: string };
 
 function client(): Sql {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL não configurada (veja .env.example).");
+  // Em desenvolvimento o .env.local pode mudar com o servidor rodando: refaz a conexão.
+  if (globalForDb.__nuestroSql && globalForDb.__nuestroSqlUrl !== url) {
+    void globalForDb.__nuestroSql.end({ timeout: 1 });
+    globalForDb.__nuestroSql = undefined;
+  }
   if (!globalForDb.__nuestroSql) {
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error("DATABASE_URL não configurada (veja .env.example).");
+    globalForDb.__nuestroSqlUrl = url;
     globalForDb.__nuestroSql = postgres(url, {
       prepare: false, // o pooler em modo transaction não suporta prepared statements
       max: 5,
