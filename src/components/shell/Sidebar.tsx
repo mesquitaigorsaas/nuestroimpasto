@@ -117,7 +117,7 @@ export function Sidebar({ user, following, variant }: Props) {
         <p className="mt-3">© {new Date().getFullYear()} Nuestro Impasto</p>
         <p className="mt-1">
           Desenvolvido por{" "}
-          <a href="https://mesquitasaas.online/" target="_blank" rel="noopener" className="font-medium hover:text-ink">
+          <a href="https://mesquitasaas.online/" target="_blank" rel="noopener" className="font-semibold text-ink underline-offset-2 hover:underline">
             Mesquita SaaS
           </a>
         </p>

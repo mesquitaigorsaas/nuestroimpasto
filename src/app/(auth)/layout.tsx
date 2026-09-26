@@ -11,7 +11,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="w-full max-w-[420px] rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8">{children}</div>
       <p className="mt-8 text-xs text-muted">
         Desenvolvido por{" "}
-        <a href="https://mesquitasaas.online/" target="_blank" rel="noopener" className="font-medium hover:text-ink">
+        <a href="https://mesquitasaas.online/" target="_blank" rel="noopener" className="font-semibold text-ink underline-offset-2 hover:underline">
           Mesquita SaaS
         </a>
       </p>

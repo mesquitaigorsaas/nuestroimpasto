@@ -92,7 +92,8 @@ export function ChannelCard({
 }) {
   const thumb = mediaUrl(channel.last_video_thumb);
   return (
-    <div className="card flex flex-col overflow-hidden">
+    // Altura fixa nas partes de texto variável: todos os cards de uma fileira ficam iguais e alinhados.
+    <div className="card flex h-full flex-col overflow-hidden">
       <Link href={`/@${channel.handle}`} className="flex flex-col items-center px-4 pt-6 pb-3 text-center">
         <Avatar name={channel.name} src={channel.avatar_key} size={80} />
         <h3 className="mt-3 flex items-center gap-1 font-semibold">
@@ -103,13 +104,13 @@ export function ChannelCard({
         <div className="mt-2">
           <MemberTypeTag type={channel.member_type} />
         </div>
-        {channel.specialty && <p className="mt-2 line-clamp-2 text-sm text-ink-2">{channel.specialty}</p>}
+        <p className="mt-2 line-clamp-2 h-10 text-sm leading-5 text-ink-2">{channel.specialty}</p>
         <p className="mt-1 text-xs text-muted">
           {followersLabel(channel.followers_count)} · {channel.videos_count} {channel.videos_count === 1 ? "vídeo" : "vídeos"}
         </p>
       </Link>
-      {channel.last_video_id && (
-        <Link href={`/watch/${channel.last_video_id}`} className="mx-4 flex items-center gap-2 rounded-lg bg-cream p-1.5 text-left hover:bg-cream-2">
+      {channel.last_video_id ? (
+        <Link href={`/watch/${channel.last_video_id}`} className="mx-4 flex h-12 items-center gap-2 rounded-lg bg-cream p-1.5 text-left hover:bg-cream-2">
           {thumb ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={thumb} alt="" className="aspect-video w-16 shrink-0 rounded object-cover" />
@@ -118,6 +119,8 @@ export function ChannelCard({
           )}
           <span className="line-clamp-2 text-xs text-ink-2">{channel.last_video_title}</span>
         </Link>
+      ) : (
+        <div className="mx-4 h-12" />
       )}
       {showFollow && viewerId !== channel.id && (
         <div className="mt-auto p-4">

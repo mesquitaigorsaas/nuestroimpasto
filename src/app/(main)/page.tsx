@@ -72,7 +72,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <Shelf title="Novos profissionais" icon="sparkles" href="/discover?sort=new">
           <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:px-0 lg:grid-cols-5">
             {creators.map((c) => (
-              <div key={c.id} className="w-56 shrink-0 sm:w-auto">
+              <div key={c.id} className="h-full w-56 shrink-0 sm:w-auto">
                 <ChannelCard channel={c} following={followedIds.has(c.id)} viewerId={user?.id} />
               </div>
             ))}

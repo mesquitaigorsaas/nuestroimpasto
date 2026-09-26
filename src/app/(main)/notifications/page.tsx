@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { mediaUrl, timeAgo } from "@/lib/format";
 import { listNotifications, type NotificationData } from "@/lib/queries";
 import { Avatar } from "@/components/Avatar";
 import { Icon, type IconName } from "@/components/icons";
 import { EmptyState, PageContainer, PageTitle } from "@/components/ui";
-import { MarkRead } from "./MarkRead";
+import { MarkRead, NotificationLink } from "./MarkRead";
 
 export const metadata = { title: "Notificações" };
 
@@ -42,7 +41,8 @@ export default async function NotificationsPage() {
 
   return (
     <PageContainer className="max-w-3xl">
-      <PageTitle icon="bell" title="Notificações" actions={hasUnread ? <MarkRead /> : undefined} />
+      <PageTitle icon="bell" title="Notificações" />
+      {hasUnread && <MarkRead />}
       {items.length === 0 ? (
         <EmptyState icon="bell" title="Nenhuma notificação" text="Quando alguém seguir você, comentar ou responder seus vídeos, aparece aqui." />
       ) : (
@@ -52,8 +52,7 @@ export default async function NotificationsPage() {
             const thumb = mediaUrl(n.video_thumb);
             return (
               <li key={n.id}>
-                <Link href={d.href} className={`flex items-start gap-3 p-4 hover:bg-cream ${!n.read_at ? "bg-basil/5" : ""}`}>
-                  <span className="mt-1.5 size-2 shrink-0 rounded-full" style={{ background: n.read_at ? "transparent" : "#D91328" }} />
+                <NotificationLink href={d.href} unread={!n.read_at}>
                   <div className="relative shrink-0">
                     {n.actor_name ? (
                       <Avatar name={n.actor_name} src={n.actor_avatar} size={44} />
@@ -73,7 +72,7 @@ export default async function NotificationsPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={thumb} alt="" className="aspect-video w-24 shrink-0 rounded-lg object-cover" />
                   )}
-                </Link>
+                </NotificationLink>
               </li>
             );
           })}
