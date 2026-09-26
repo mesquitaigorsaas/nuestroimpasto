@@ -13,7 +13,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const user = await getCurrentUser();
 
   const chips = (
-    <div className="no-scrollbar sticky top-14 z-20 -mx-4 mb-4 flex gap-3 overflow-x-auto bg-cream/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+    <div className="no-scrollbar sticky top-16 z-20 -mx-4 mb-4 flex gap-3 overflow-x-auto bg-cream/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
       <Link href="/" className={`chip ${!category ? "chip-on" : "chip-off"}`}>
         Tudo
       </Link>

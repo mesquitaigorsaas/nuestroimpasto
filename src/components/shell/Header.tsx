@@ -24,7 +24,7 @@ export function Header({ user, unread, onMenu }: Props) {
   const [mobileSearch, setMobileSearch] = useState(false);
 
   return (
-    <header className="fixed top-0 right-0 left-0 z-40 flex h-14 items-center gap-2 bg-cream/95 px-2 backdrop-blur sm:px-4">
+    <header className="fixed top-0 right-0 left-0 z-40 flex h-16 items-center gap-2 bg-cream/95 px-2 backdrop-blur sm:px-4">
       <span className="tricolore absolute right-0 bottom-0 left-0 h-[3px]" aria-hidden="true" />
       {mobileSearch ? (
         <>

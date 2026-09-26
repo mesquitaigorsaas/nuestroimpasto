@@ -62,7 +62,7 @@ export function AppShell({ user, unread, following, children }: Props) {
 
       {/* Menu fixo (desktop) */}
       {!drawerOnly && (
-        <aside className="fixed top-14 bottom-0 left-0 z-30 hidden md:block">
+        <aside className="fixed top-16 bottom-0 left-0 z-30 hidden md:block">
           <div className={`h-full ${expanded ? "xl:w-60" : ""} w-[76px]`}>
             <div className={`hidden h-full ${expanded ? "xl:block" : ""}`}>
               <Sidebar user={user} following={following} variant="full" />
@@ -85,19 +85,19 @@ export function AppShell({ user, unread, following, children }: Props) {
             drawer ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <div className="flex h-14 items-center gap-3 px-4">
+          <div className="flex h-16 items-center gap-3 px-4">
             <button className="icon-btn" onClick={() => setDrawer(false)} aria-label="Fechar menu">
               <Icon name="menu" />
             </button>
             <Logo />
           </div>
-          <div className="h-[calc(100%-3.5rem)]">
+          <div className="h-[calc(100%-4rem)]">
             <Sidebar user={user} following={following} variant="full" />
           </div>
         </div>
       </div>
 
-      <main className={`pt-14 pb-20 md:pb-8 ${railWidth}`}>{children}</main>
+      <main className={`pt-16 pb-20 md:pb-8 ${railWidth}`}>{children}</main>
 
       <MobileNav user={user} />
 

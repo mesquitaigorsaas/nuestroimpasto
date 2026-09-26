@@ -98,7 +98,7 @@ export async function ChannelView({ handle, tab, sort }: { handle: string; tab: 
       </div>
 
       {/* Abas */}
-      <nav className="no-scrollbar sticky top-14 z-20 -mx-4 mt-4 flex gap-1 overflow-x-auto border-b border-line bg-cream/95 px-4 backdrop-blur sm:-mx-6 sm:px-6">
+      <nav className="no-scrollbar sticky top-16 z-20 -mx-4 mt-4 flex gap-1 overflow-x-auto border-b border-line bg-cream/95 px-4 backdrop-blur sm:-mx-6 sm:px-6">
         {TABS.map((t) => (
           <Link
             key={t.key}
