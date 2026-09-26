@@ -121,9 +121,9 @@ export function Logo({ compact = false }: { compact?: boolean }) {
       {compact ? (
         <img src="/mark.png" alt="Nuestro Impasto" className="size-9" />
       ) : (
-        <span className="flex flex-col items-center leading-none">
+        <span className="flex flex-col items-start leading-none">
           <img src="/logo.png" alt="Nuestro Impasto" className="h-9 w-auto" />
-          <span className="mt-[3px] text-[9px] font-medium tracking-[0.02em] whitespace-nowrap text-basil">
+          <span className="mt-1 text-[11px] font-semibold tracking-[0.01em] whitespace-nowrap text-basil">
             La comunidad de los que hacen masa
           </span>
         </span>
