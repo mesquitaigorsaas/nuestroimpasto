@@ -141,7 +141,11 @@ function UserMenu({ user }: { user: ShellUser }) {
         <Avatar name={user.name} src={user.avatar_key} size={32} />
       </button>
       {open && (
-        <div className="absolute top-11 right-0 w-72 overflow-hidden rounded-xl border border-line bg-white py-2 shadow-xl" onClick={() => setOpen(false)}>
+        <div
+          className="absolute top-11 right-0 w-72 overflow-hidden rounded-xl border border-line bg-white py-2 shadow-xl"
+          // Não fecha ao clicar em "Sair": remover o formulário antes do envio cancelaria o logout.
+          onClick={(e) => !(e.target as HTMLElement).closest("form") && setOpen(false)}
+        >
           <div className="flex gap-3 border-b border-line px-4 pt-2 pb-3">
             <Avatar name={user.name} src={user.avatar_key} size={40} />
             <div className="min-w-0">
