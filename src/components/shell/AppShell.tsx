@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "../icons";
+import { BackBar } from "./BackBar";
 import { Header, type ShellUser } from "./Header";
 import { Sidebar, type SidebarChannel } from "./Sidebar";
 
@@ -97,7 +98,10 @@ export function AppShell({ user, unread, following, children }: Props) {
         </div>
       </div>
 
-      <main className={`pt-16 pb-20 md:pb-8 ${railWidth}`}>{children}</main>
+      <main className={`pt-16 pb-20 md:pb-8 ${railWidth}`}>
+        <BackBar className="mx-auto max-w-[1760px] px-4 pt-3 sm:px-6" />
+        {children}
+      </main>
 
       <MobileNav user={user} />
 
