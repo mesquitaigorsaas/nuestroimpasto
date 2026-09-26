@@ -154,3 +154,6 @@ export const VERIFICATION_FIELDS: Record<VerificationType, VerificationField[]> 
     { key: "adicionais", label: "Informações adicionais", long: true, evidence: "other" },
   ],
 };
+
+/** @ que ninguém pode usar (rotas do site e nome da marca). */
+export const RESERVED_HANDLES = new Set(["admin", "studio", "me", "watch", "feed", "api", "media", "login", "signup", "nuestro", "impasto", "suporte"]);

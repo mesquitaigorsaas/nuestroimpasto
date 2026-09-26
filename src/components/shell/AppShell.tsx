@@ -118,11 +118,11 @@ export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="Nuestro Impasto — início">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/mark.png" alt="" className="size-8" />
-      {!compact && (
-        <span className="flex flex-col leading-none">
-          <span className="text-[9px] font-medium tracking-[0.35em] text-ink-2">NUESTRO</span>
-          <span className="text-[17px] font-bold tracking-[0.08em] text-ink">IMPASTO</span>
+      {compact ? (
+        <img src="/mark.png" alt="Nuestro Impasto" className="size-9" />
+      ) : (
+        <span className="flex flex-col items-center leading-none">
+          <img src="/logo.png" alt="Nuestro Impasto" className="h-9 w-auto" />
           <span className="mt-[3px] text-[9px] font-medium tracking-[0.02em] whitespace-nowrap text-basil">
             La comunidad de los que hacen masa
           </span>

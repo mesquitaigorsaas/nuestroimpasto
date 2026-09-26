@@ -6,7 +6,7 @@ import { get, newId, run } from "@/lib/db";
 import { slugifyHandle } from "@/lib/format";
 import type { ActionState } from "@/lib/types";
 
-const RESERVED = new Set(["admin", "studio", "me", "watch", "feed", "api", "media", "login", "signup", "nuestro", "impasto", "suporte"]);
+import { RESERVED_HANDLES as RESERVED } from "@/lib/constants";
 
 function safeNext(next: FormDataEntryValue | null) {
   const n = typeof next === "string" ? next : "";
