@@ -2,13 +2,13 @@ import { newId } from "./db";
 
 /**
  * Arquivos no Supabase Storage (API REST, só no servidor).
- * - bucket "media" (público): videos/, thumbs/, avatars/, banners/
+ * - bucket "media" (público): videos/, thumbs/, avatars/, banners/, ads/
  * - bucket "private": documentos da verificação (chaves "private/…"), só admins leem.
  * O navegador envia o arquivo direto para o Storage com uma URL assinada — o arquivo
  * não passa pelo nosso servidor (a Vercel limita o corpo das requisições a ~4,5 MB).
  */
 
-export type StorageKind = "videos" | "thumbs" | "avatars" | "banners" | "private";
+export type StorageKind = "videos" | "thumbs" | "avatars" | "banners" | "ads" | "private";
 
 function config() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

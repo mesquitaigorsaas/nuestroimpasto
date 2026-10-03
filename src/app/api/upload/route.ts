@@ -3,11 +3,12 @@ import { canPublish, getCurrentUser } from "@/lib/auth";
 import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "@/lib/constants";
 import { MIME, storage, type StorageKind } from "@/lib/storage";
 
-const RULES: Record<string, { kind: StorageKind; exts: string[]; max: number; needsPublisher: boolean }> = {
+const RULES: Record<string, { kind: StorageKind; exts: string[]; max: number; needsPublisher: boolean; needsAdmin?: boolean }> = {
   video: { kind: "videos", exts: ["mp4", "webm", "mov", "m4v"], max: MAX_VIDEO_BYTES, needsPublisher: true },
   thumb: { kind: "thumbs", exts: ["jpg", "jpeg", "png", "webp"], max: MAX_IMAGE_BYTES, needsPublisher: true },
   avatar: { kind: "avatars", exts: ["jpg", "jpeg", "png", "webp"], max: MAX_IMAGE_BYTES, needsPublisher: false },
   banner: { kind: "banners", exts: ["jpg", "jpeg", "png", "webp"], max: MAX_IMAGE_BYTES, needsPublisher: false },
+  ad: { kind: "ads", exts: ["jpg", "jpeg", "png", "webp"], max: MAX_IMAGE_BYTES, needsPublisher: false, needsAdmin: true },
   document: { kind: "private", exts: ["jpg", "jpeg", "png", "webp", "pdf"], max: MAX_IMAGE_BYTES * 2, needsPublisher: false },
 };
 
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
   const rule = RULES[type];
   if (!rule) return NextResponse.json({ error: "Tipo de upload inválido." }, { status: 400 });
   if (!rule.exts.includes(ext)) return NextResponse.json({ error: `Formato não suportado (.${ext}).` }, { status: 400 });
+  if (rule.needsAdmin && user.role !== "admin") return NextResponse.json({ error: "Somente administradores." }, { status: 403 });
   if (rule.needsPublisher && !canPublish(user))
     return NextResponse.json({ error: "Somente membros verificados podem publicar." }, { status: 403 });
   if (!size) return NextResponse.json({ error: "Arquivo vazio." }, { status: 400 });

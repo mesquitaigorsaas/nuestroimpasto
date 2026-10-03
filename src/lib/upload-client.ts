@@ -4,7 +4,7 @@
  */
 export function uploadFile(
   body: Blob,
-  type: "video" | "thumb" | "avatar" | "banner" | "document",
+  type: "video" | "thumb" | "avatar" | "banner" | "ad" | "document",
   ext: string,
   onProgress?: (pct: number) => void,
 ): { promise: Promise<string>; abort: () => void } {
@@ -48,13 +48,19 @@ export function extOf(file: File) {
   return file.type.split("/").pop() ?? "bin";
 }
 
-/** Redimensiona uma imagem no navegador e devolve JPEG (reduz o peso de fotos de celular). */
+/**
+ * Redimensiona uma imagem no navegador e devolve JPEG (reduz o peso de fotos de celular).
+ * JPEG não tem transparência: PNG sem fundo ganha fundo branco (senão o transparente vira preto).
+ */
 export async function resizeImage(file: File, maxW: number, maxH: number, quality = 0.86): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxW / bitmap.width, maxH / bitmap.height);
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Falha ao processar imagem"))), "image/jpeg", quality));
 }

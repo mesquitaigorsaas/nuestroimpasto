@@ -6,11 +6,14 @@ import { activeDiscussions, followingVideos, forYou, newCreators, trendingVideos
 import { ChannelCard, EmptyState, PageContainer, Shelf } from "@/components/ui";
 import { VideoCard, VideoGrid } from "@/components/video/VideoCard";
 import { Icon } from "@/components/icons";
+import { HomeAdBanner } from "@/components/HomeAdBanner";
+import { getHomeAd } from "@/lib/settings";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ cat?: string }> }) {
   const { cat } = await searchParams;
   const category = CATEGORIES.some((c) => c.slug === cat) ? cat : undefined;
   const user = await getCurrentUser();
+  const ad = await getHomeAd();
 
   const chips = (
     <div className="no-scrollbar sticky top-16 z-20 -mx-4 mb-4 flex gap-3 overflow-x-auto bg-cream/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
@@ -24,12 +27,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       ))}
     </div>
   );
+  const adBanner = <HomeAdBanner ad={ad} />;
 
   if (category) {
     const videos = await forYou(user?.id ?? null, 48, category);
     return (
       <PageContainer className="pt-0">
         {chips}
+        {adBanner}
         {videos.length ? (
           <VideoGrid videos={videos} />
         ) : (
@@ -52,6 +57,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     return (
       <PageContainer className="pt-0">
         {chips}
+        {adBanner}
         <Welcome canPost={canPublish(user)} loggedIn={!!user} />
       </PageContainer>
     );
@@ -60,6 +66,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   return (
     <PageContainer className="pt-0">
       {chips}
+      {adBanner}
       <VideoGrid videos={feed.slice(0, 8)} />
 
       {following.length > 0 && (

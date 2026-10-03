@@ -11,6 +11,7 @@ export function AdminTabs({ pendingVerifications, openReports }: { pendingVerifi
     { href: "/admin/reports", label: "Denúncias", badge: openReports },
     { href: "/admin/users", label: "Usuários" },
     { href: "/admin/videos", label: "Vídeos" },
+    { href: "/admin/ads", label: "Publicidade" },
     { href: "/admin/log", label: "Histórico de ações" },
   ];
   return (
